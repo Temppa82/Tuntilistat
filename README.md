@@ -1,3 +1,11 @@
+## Versio 2.3.2 – synkronoinnin ohjaus
+
+Synkronointipainike kertoo nyt tarvittavan seuraavan vaiheen: yhteyden valmistelu, Google-kirjautuminen, kansion valinta tai synkronointi. Pelkkä luonnos ei ole lähetysjonossa: paina ensin Tallenna puhelimeen. Yhteyden ja kansion muutokset päivittyvät näkymään. Sisältää myös version 2.3.1 kansiokorjauksen.
+
+## Versio 2.3.1 – puhelimen kansio-oikeuden korjaus
+
+Jos selain estää paikallisen kansion käytön, sovellus siirtyy sovellusmuistiin. Kirjaukset säilyvät paikallisesti, ja Pamarkin Drive-haku ja synkronointi toimivat edelleen. Kansion voi valita uudelleen asetuksissa. Päivityksen jälkeen sulje sovellus ja avaa uudelleen. Älä tyhjennä selaimen tietoja.
+
 # Päivitys 2.3 – Pamarkin tiedosto avataan Drivestä
 
 1. Valitse **Pamark ajolista**. Sovellus etsii kirjauksen päivämäärää vastaavan puolikuukauden tiedoston kerran valitusta jaetusta Drive-kansiosta.
