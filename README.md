@@ -1,3 +1,15 @@
+## Versio 2.6 – Drive-synkronoinnin version ehdon korjaus (25.9.2026)
+
+Korjattu syy: versio 2.5 lähetti `If-Match`-ehdon myös ajolistan **lataukselle**. Driven media-endpoint vertaa ehtoa tiedoston sisältö-eTagiin, joka eriää `files.list`-haun metatieto-eTagista, joten jokainen synkronointi pysähtyi vastaukseen 412 eli "Jaettu ajolista muuttui samaan aikaan". Uudelleenyritys ei auttanut, koska sama ehto hylättiin joka kerta. Lataus on nyt tavallinen luku, ja atomiversioehto on vain kirjoituksessa.
+
+Vahvistettu käytännössä: kirjoitus hakee eTagin juuri ennen tallennusta `files.get`-kutsulla eikä käytä `files.list`-haun arvaa, koska vain ensimmäinen on taattu vertailtavaksi. Ehto on edelleen voimassa ja estää muiden kuljettajien rivien ylikirjoituksen. Jos Google hylkää saman eTagin kahdesti peräkkäin, synkronointi ilmoittaa sen kerran sen sijaan, että toistaisi saman epäonnistumisen, eikä jaettua tiedostoa muuteta lainkaan. Virheilmoitus kertoo nyt, kosteessa 412 tuli.
+
+Testattu: simuloidulla Drivellä version 2.5 ehto, version ehto hylättynä kahdesti, uudelleenyritys aidon ristiriidan jälkeen, toisen kuljettajan säilyminen, saman rivin ristiriidan torjunta, tiedoston luonti, duplikaatin torjunta, offline-varakansio sekä koko TypeScript- ja XLSX-testisarja. Varmistamatta: oikea Google-tili ja jaettu kansio, koska Drive-vastaukset simuloitiin.
+
+Päivitys: pura ZIP ja lataa sen tiedostot GitHub-repositorion juureen korvaten samannimiset. Avaa päivitys verkkoyhteydessä ja sulje vanhat sovellusikkunat. Asetuksissa näkyy versio 2.6. Paikalliset kirjaukset ja asetukset säilyvät.
+
+---
+
 ## Versio 2.5 – päivän tiedonkulun korjaus (25.9.2026)
 
 Pura ZIP ja lataa sen tiedostot suoraan GitHub-repositorion juureen korvaten samannimiset. Paketti sisältää litteän GitHub Pages -julkaisun. Asetuksissa näkyy versio 2.5. Avaa päivitys verkkoyhteydessä ja sulje vanhat sovellusikkunat, jotta uusi offline-versio pääsee käyttöön. Paikalliset kirjaukset ja asetukset säilytetään.
