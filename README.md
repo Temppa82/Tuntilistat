@@ -1,3 +1,17 @@
+## Versio 2.7 – ristiriitaisen päivän avaamisen korjaus (25.9.2026)
+
+Korjattu syy: kun päivän lähettämätön kirjaus ei sovi jaetun tiedoston riviin, synkronointi ilmoitti "Tälle päivälle on jo erilinen kirjaus" – ja sitten **myös päivän avaaminen kaatui samaan virheeseen**. Päivän avaaminen yhdisti lähettämättömän kirjauksen ladattuun kopioon ilman suojausta, joten kuljettaja ei päässyt vertaamaan tiedoston riviä eikä rakentamaan omaa kirjaustaan sen päälle. Ohje "avaa päivä tiedostosta ja yhdistä oma kirjaus" ei siis toiminut juuri siinä tilanteessa, jota se koskee.
+
+Nyt avaaminen ei pysähdy: ristiriitainen kirjaus jätetään pois päivän näkymästä, se kerrotaan käyttöliittymässä selvästi, ja kirjaus jää tallennusjonoon koskemattomana mukaan myöhempään tarkistukseen. Toinen korjaus: tallennus ei enää pyyhki luonnoksen omaa vertailutietoa epäonnistuneen työn vanhalla tiedolla, joten tiedoston version päälle koottu kirjaus todella synkronoidaan.
+
+Vahvistettu käytännössä: epäonnistuneen synkronoinnin jälkeen päivä avautuu, lomake perustuu jaetun tiedoston riviin, ja sille kootu uusi kirjaus synkronoidaan. Samalla varmistettu, ettei toisen kuljettajan arvo katoa: korvauksessa säilyvät tiedoston rivin kentät, joita oma kirjaus ei koske.
+
+Testattu: uusi regressiotesti "failed sync no longer blocks opening the day" oikealla lähdetiedoston kopiolla, vanha testi päivitettiin vaatimaan uuden käyttäytymisen, sekä koko TypeScript- ja XLSX-testisarja. Varmistamatta: oikea Google-tili ja jaettu kansio, koska Drive-vastaukset simuloitiin.
+
+Päivitys: pura ZIP ja lataa sen tiedostot GitHub-repositorion juureen korvaten samannimiset. Avaa päivitys verkkoyhteydessä ja sulje vanhat sovellusikkunat. Asetuksissa näkyy versio 2.7. Paikalliset kirjaukset ja asetukset säilyvät, ja jonossa oleva ristiriitainen kirjaus säilyy puhelimella.
+
+---
+
 ## Versio 2.6 – Drive-synkronoinnin version ehdon korjaus (25.9.2026)
 
 Korjattu syy: versio 2.5 lähetti `If-Match`-ehdon myös ajolistan **lataukselle**. Driven media-endpoint vertaa ehtoa tiedoston sisältö-eTagiin, joka eriää `files.list`-haun metatieto-eTagista, joten jokainen synkronointi pysähtyi vastaukseen 412 eli "Jaettu ajolista muuttui samaan aikaan". Uudelleenyritys ei auttanut, koska sama ehto hylättiin joka kerta. Lataus on nyt tavallinen luku, ja atomiversioehto on vain kirjoituksessa.
