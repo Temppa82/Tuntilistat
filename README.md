@@ -1,3 +1,13 @@
+## Versio 2.4 – aiempien päivien avaaminen ja tuntilistan tuonti
+
+Valitse Tunnit tai Pamark ajolista. Avaa päivä -kohdassa valitse päivämäärä ja Pamarkille myös rekisterinumero. Avaa päivän tiedot palauttaa säilytetyn paikallisen luonnoksen tai tiedoston päiväkirjauksen. Näytä tallennetun tiedoston tiedot avaa tiedoston version myös silloin, kun lomakkeessa oli jo luonnos. Luonnos säilytetään erikseen ja palautuu Avaa päivän tiedot -painikkeella. Päivän tiedot näytetään tarkistusnäkymässä; Muokkaa avaa kentän valmiiksi täytettynä.
+
+Tunnit-näkymän Tuo aloitettu tuntilista (.xlsx) tuo täytetyn alkuperäisen mallin mukaisen tiedoston sovellusmuistiin muuttamatta sen rakennetta. Tiedoston nimen sijaan kuukausi päätellään päiväriveistä. Kuljettajan nimen tulee vastata omaa nimeä. Jos saman kuukauden paikallinen lista sisältää jo eri kirjauksia, tuonti pysäytetään niiden suojaamiseksi. Tuotu tuntilista tallennetaan sovellusmuistiin; kopion voi viedä XLSX-painikkeella.
+
+Pamarkin avaaminen käyttää Google-yhteyden ollessa käytettävissä jaettua tiedostoa ja yhdistää lähettämättömät paikalliset kirjaukset paikalliseen kopioon. Offline-tilassa tarvitaan aiemmin haettu kopio. Päivän avaaminen ei lähetä päiväkirjauksia; siihen käytetään edelleen Synkronoi-painiketta.
+
+Pura jakelupaketti GitHub-repositorion juureen ja korvaa samannimiset tiedostot. Sulje sovellus päivityksen jälkeen ja avaa uudelleen verkkoyhteydessä. Älä tyhjennä selaimen tallennustietoja.
+
 ## Versio 2.3.2 – synkronoinnin ohjaus
 
 Synkronointipainike kertoo nyt tarvittavan seuraavan vaiheen: yhteyden valmistelu, Google-kirjautuminen, kansion valinta tai synkronointi. Pelkkä luonnos ei ole lähetysjonossa: paina ensin Tallenna puhelimeen. Yhteyden ja kansion muutokset päivittyvät näkymään. Sisältää myös version 2.3.1 kansiokorjauksen.
