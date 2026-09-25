@@ -1,3 +1,17 @@
+## Versio 2.8 – tuntilistan tuonnin yhdistäminen (25.9.2026)
+
+Korjattu syy: tuntilistan tuonti keskeytyi kokonaan, kun puhelimella oli jo kyseisen kuukauden kirjauksia. Viesti "Tämän kuukauden tuntilista sisältää jo paikallisia kirjauksia. Tuontia ei tehty, jotta ne eivät korvaudu" oli lopullinen este: mitään ei voitu tuoda, eikä mitään painiketta tarjottu. Seurauksena kuukausilista jäi vain puhelimella kirjattu päivä, vaikka tuotava tiedosto oli täytetty.
+
+Nyt tuonti **yhdistää** päivittäin eikä koskaan hylkää kokonaisuutta. Päivät, joita puhelimella ei ole, tulevat tiedostosta. Päivät, joita puhelimella on, kirjoitetaan vain tiedoston arvoilla jos ne eroavat – ja tällöin tuonnin jälkeen näytetään luettelo päivistä, joita **ei** korvattu, sekä painike "Korvaa puhelimen kirjaukset", jolla ratkaisu tehdään tietäen. Puhelimella olevaa päivää ei koskaan pudoteta tuonnin yhteydessä, ei edes vahvistetussa korvauksessa. Jos kuukausilistaa ei ole vielä ollut, tuotava tiedosto otetaan sellaisenaan ilman uudelleenkirjoitusta.
+
+Vahvistettu käyttäytyminen: ensimmäinen tuonti säilyttää tiedoston tavumuiseen asti. Myöhempi tuonti tuo uudet päivät, raportoi erilaiset päivät ilman korvausta, säilyttää puhelimen arvon, ja vasta vahvistuksen jälkeen kirjoittaa tiedoston arvot – puhelimella oleva toinen päivä säilyy myös siinä.
+
+Testattu: päivittäinen yhdistäminen oikeilla tuntilistoilla, puhelimen oman päivän säilyminen tuonnissa, ristiriidan raportointi ilman kirjoitusta, vahvistettu korvaus ilman päivän pudottamista, sekä koko TypeScript- ja XLSX-testisarja. Varmistamatta: oikea Google-tili ja jaettu kansio, koska Drive-vastaukset simuloitiin.
+
+Päivitys: pura ZIP ja lataa sen tiedostot GitHub-repositorion juureen korvaten samannimiset. Avaa päivitys verkkoyhteydessä ja sulje vanhat sovellusikkunat. Asetuksissa näkyy versio 2.8. Paikalliset kirjaukset ja asetukset säilyvät.
+
+---
+
 ## Versio 2.7 – ristiriitaisen päivän avaamisen korjaus (25.9.2026)
 
 Korjattu syy: kun päivän lähettämätön kirjaus ei sovi jaetun tiedoston riviin, synkronointi ilmoitti "Tälle päivälle on jo erilinen kirjaus" – ja sitten **myös päivän avaaminen kaatui samaan virheeseen**. Päivän avaaminen yhdisti lähettämättömän kirjauksen ladattuun kopioon ilman suojausta, joten kuljettaja ei päässyt vertaamaan tiedoston riviä eikä rakentamaan omaa kirjaustaan sen päälle. Ohje "avaa päivä tiedostosta ja yhdistä oma kirjaus" ei siis toiminut juuri siinä tilanteessa, jota se koskee.
