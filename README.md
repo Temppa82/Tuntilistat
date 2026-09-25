@@ -1,3 +1,29 @@
+## Versio 2.5 – päivän tiedonkulun korjaus (25.9.2026)
+
+Pura ZIP ja lataa sen tiedostot suoraan GitHub-repositorion juureen korvaten samannimiset. Paketti sisältää litteän GitHub Pages -julkaisun. Asetuksissa näkyy versio 2.5. Avaa päivitys verkkoyhteydessä ja sulje vanhat sovellusikkunat, jotta uusi offline-versio pääsee käyttöön. Paikalliset kirjaukset ja asetukset säilytetään.
+
+Korjatut syyt:
+- Oikean Pamark-pohjan tyhjillä reittiriveillä on `Reitti:`. Vanha tunnistus piti niitä varattuina; samaa tallennusrivin hakua käytettiin myös pelkkään päivän lukemiseen. Nyt lukeminen ei vaadi vapaata riviä, ja tyhjä otsikko sekä laskentakaavat eivät varaa päivää. Täysi ja puutteellinen osio erotetaan.
+- Täytetty luonnos esti tiedoston tietojen avaamisen ilman ilmoitusta. Nyt ero näytetään kentittäin ja valitaan jatkettava versio. Auton vaihto avaa erillisen luonnoksen; se ei muuta vain rekisteritunnusta vanhan kirjauksen päälle.
+- Drive-synkronoinnista puuttui avaamishetken rivivertailu, joten myös oma korjaus torjuttiin. Nyt avattu rivi kulkee luonnoksen mukana. Uusin Drive-tiedosto luetaan, vain oma muuttumaton rivi päivitetään ja koko tiedoston samanaikainen muutos suojataan version ehdolla. Muuttunutta omaa riviä ei ylikirjoiteta.
+- Kansion vanha tiedosto saattoi korvata sovellusmuistin uudemman, kansioon kirjoittamattoman työkopion. Työkopio säilytetään nyt ensisijaisena ja ero pysäyttää kansion korvaamisen.
+- Jaetun Excel-kaavan jatkosolu tunnistetaan kaavaksi myös ilman omaa kaavatekstiä. Päiväkirjaukset ja uusien jaksojen luonti säilyttävät pohjan kaavat.
+
+Testattu oikeiden tiedostojen erillisillä kopioilla:
+- `Pamark ajolista syyskuu 1-2 2026.xlsx`: todelliset kuusi auto-osiota, Excel-päivämäärät, sekä tekstinä että numeroina olevat ajat ja tyhjät Reitti-rivit.
+- `Tuntilista Teemu.xlsx`: 28 päiväriviä, kolme sairauspäivää ja aloitettu työpäivä maaliskuussa 2025. Vanha hours.xlsx-testikopio on SHA-256-tarkistuksella sama tiedosto. Käyttäjä vahvisti rakenteen nykyiseksi; vanhoja kirjauksia ei käytetä uuden kuukausilistan sisältönä.
+- Olemassa olevien päivien avaaminen, uuden päivän lisäys, korjaus ja uudelleenluku, 15./16. päivän tiedostonimi, 25.9. kirjaus jälkipuoliskoon, aidosti täysi osio ja rikkinäinen rakenne.
+- Tuntilistan tuonti tavuntarkasti sekä tallennus/vienti: alkuperäiset neljä päivää säilyivät ja uusi viides päivä lisättiin. Kaavat, tyylit ja muut XLSX-paketin osat tarkistettiin.
+- Oikea Edge-selaintesti erillisessä testiprofiilissa: Pamarkin kenttien avaus, auton/listan vaihto, luonnosristiriidan valinta, paikallinen korjaus sekä sivun sulkeminen ja uudelleenavaus.
+- Julkaisuversio Edge-selaimessa: tuntilistan paikallinen tallennus ja XLSX-lataus sekä sulkeminen/uudelleenavaus ilman verkkoa toimivan service workerin avulla.
+- Simuloitu Drive käyttäen oikean XLSX:n kopiota: oman olemassa olevan rivin korjaus, saman rivin seuraava korjaus synkronoinnin jälkeen, muiden kuljettajien säilyminen, samanaikaisen koko tiedoston muutoksen uudelleenyritys ja saman rivin ristiriidan torjuminen ilman lähettämistä. Lisäksi aiemmat Drive-, kansiolupa-, tuonti-, vienti- ja offline-testit sekä TypeScript-tarkistus ja julkaisuversio menivät läpi.
+
+Varmistamatta: oikean Google-tilin kirjautuminen, jaetun Drive-kansion todellinen luku/kirjoitus ja käyttöoikeudet; Androidin ja iPhonen fyysiset laitteet; Excelin oma kaavojen uudelleenlaskenta. Drive-testeissä verkkovastaukset simuloitiin. Tuotannon ajolistoihin ei tehty testikirjauksia. Pohjan olemassa olevia kaavavirheitä ei korjata tässä päiväkirjauksen muutoksessa.
+
+Tallenna puhelimeen säilyttää työkopion kansiossa tai sovellusmuistissa ja kertoo käytetyn paikan. Synkronoi lähettää vain Pamark-kirjaukset. Tuntilista pysyy paikallisena. Vanhoilta luonnoksilta voi puuttua turvallisen Drive-korjauksen vertailutieto: avaa silloin tiedoston päivä ja tee korjaus sen pohjalta; vanha luonnos säilyy erikseen.
+
+---
+
 ## Versio 2.4 – aiempien päivien avaaminen ja tuntilistan tuonti
 
 Valitse Tunnit tai Pamark ajolista. Avaa päivä -kohdassa valitse päivämäärä ja Pamarkille myös rekisterinumero. Avaa päivän tiedot palauttaa säilytetyn paikallisen luonnoksen tai tiedoston päiväkirjauksen. Näytä tallennetun tiedoston tiedot avaa tiedoston version myös silloin, kun lomakkeessa oli jo luonnos. Luonnos säilytetään erikseen ja palautuu Avaa päivän tiedot -painikkeella. Päivän tiedot näytetään tarkistusnäkymässä; Muokkaa avaa kentän valmiiksi täytettynä.
