@@ -1,0 +1,146 @@
+import {useEffect,useState} from 'react';
+
+import type {Draft,ListKind} from '@/lib/capture';
+
+import {validateDraft} from '@/lib/capture';
+
+
+import {fillWorkbook,workbookName,EntryConflict} from '@/lib/workbook-export';
+
+import {getStored,putStored,digest,downloadWorkbook,sharedDirectory,permit,readWorkbook,writeWorkbook,type SavedWorkbook} from '@/lib/local-files';
+
+import {ensurePeriod,storedWorkbook} from '@/lib/period-files';
+import {addVehicleSection} from '@/lib/add-vehicle';
+import {saveVehicle} from '@/lib/vehicle-settings';
+
+import {loadTemplate,type ListTemplate} from '@/lib/templates';
+import {prepareGoogle,connectGoogle,connected,savedDriveFolder} from '@/lib/google-drive';
+import {enqueuePamark,flushPamark,checkSharedList} from '@/lib/pamark-sync';
+
+
+
+export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:Draft;name:string;onNew:()=>void}){
+
+  const [template,setTemplate]=useState<ListTemplate>(),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(''),[saved,setSaved]=useState(false),[conflict,setConflict]=useState(false),[unknown,setUnknown]=useState('');
+  const [driveBusy,setDriveBusy]=useState(false),[driveMessage,setDriveMessage]=useState(''),[driveError,setDriveError]=useState('');
+
+ useEffect(()=>{let live=true;loadTemplate(kind).then(t=>{if(live)setTemplate(t);}).catch(()=>setError('Listapohjaa ei voitu avata.'));return()=>{live=false;};},[kind]);
+
+ useEffect(()=>{setSaved(false);setMessage('');},[draft.updatedAt,name]);
+
+
+ async function save(overwrite=false){
+
+  if(!template)return;setBusy(true);setError('');setConflict(false);setSaved(false);setUnknown('');
+
+  try{
+
+   const filename=workbookName(kind,draft.values.date,name),dir=await getStored<boolean>(`imported:${filename}`)?undefined:await sharedDirectory();if(dir)await permit(dir);await ensurePeriod(kind,draft.values.date,name);
+
+   const operation=async()=>{
+
+    const cached=await getStored<SavedWorkbook>(`workbook:${filename}`);
+
+    const baseline=dir?await readWorkbook(dir,filename):undefined;
+
+    if(cached&&!cached.savedToFolder&&baseline&&await digest(cached.bytes)!==await digest(baseline))throw new Error('Kansion tiedosto ja sovellusmuistin työkopio eroavat. Työkopio säilyy sovellusmuistissa; vie se XLSX-tiedostona ennen kansion tiedoston vaihtamista.');
+    const result=fillWorkbook((cached&&!cached.savedToFolder?cached.bytes:baseline||cached?.bytes)||template.bytes,kind,draft,name,{fresh:!baseline&&!cached,overwrite});
+
+    await putStored(`workbook:${filename}`,{filename,bytes:result.bytes,updatedAt:new Date().toISOString(),kind,savedToFolder:false} satisfies SavedWorkbook);
+
+    let savedToFolder=false;
+    if(dir&&(savedToFolder=await writeWorkbook(dir,filename,result.bytes,baseline))){await putStored(`workbook:${filename}`,{filename,bytes:result.bytes,updatedAt:new Date().toISOString(),kind,savedToFolder:true} satisfies SavedWorkbook);}
+
+     setSaved(true);setMessage(savedToFolder&&dir?`Tallennettu kansioon ${dir.name}: ${filename}`:kind==='pamark'?'Ajolista on tallessa tällä laitteella.':'Tuntilista on tallessa tällä laitteella.');
+
+    window.dispatchEvent(new Event('local-workbooks-changed'));
+
+   };
+
+    if(navigator.locks)await navigator.locks.request(`ajolista:${filename}`,operation);else await operation();
+
+    navigator.storage?.persist?.().catch(()=>{});
+
+    // Päivä lähetetään jaettuun ajolistaan vain, jos kansio on valittu. Paikallinen tallennus
+    // on jo onnistunut, joten jonon puuttuminen ei saa estää sitä.
+    const queued=await queueForDrive(filename);
+    if(queued)setMessage((current)=>current+' Päivä odottaa Driveen lähettämistä.');
+
+   }catch(e){const text=e instanceof Error?e.message:'Tallennus epäonnistui. Luonnos säilyy.';setConflict(e instanceof EntryConflict);
+    // A vehicle that is not in the list yet is not an error the driver can fix by typing:
+    // offer the new section instead of leaving a dead end.
+    if(kind==='pamark'&&/Autoa ei löytynyt listapohjasta/.test(text)&&draft.values.vehicle){setUnknown(draft.values.vehicle);setError(`Autolla ${draft.values.vehicle} ei ole omaa osiota tässä ajolistassa.`);}else setError(text);}finally{setBusy(false);}
+
+  }
+
+  async function queueForDrive(filename:string){
+   if(kind!=='pamark')return false;
+   try{if(!await savedDriveFolder())return false;await enqueuePamark(draft,name);return true;}
+   catch{return false;}
+  }
+
+  // Lähettää puhelimessa olevat päivät jaettuun ajolistaan ja tuo yhdistetyn tiedoston
+  // takaisin omaan kopioon. Yhdistämisen varmennus huolehtii siitä, ettei muiden
+  // kuljettajien rivejä eikä laskentakaavoja muuteta.
+  async function syncDrive(){
+   if(kind!=='pamark')return;setDriveBusy(true);setDriveError('');setDriveMessage('');
+   try{
+    if(!connected()){await prepareGoogle();await connectGoogle();}
+    const folder=await savedDriveFolder();
+    if(!folder)throw new Error('Valitse jaettu Drive-kansio kohdasta Asetukset.');
+    const sent=await flushPamark();
+    // Tiedoston tila luetaan vasta lähetyksen jälkeen, muuten ilmoitus kertoisi
+    // vanhan päivämäärän eikä sitä, mihin oma kirjaus päätyi.
+    const check=await checkSharedList(folder.id,draft.values.date,name);
+    const moved=sent?`${sent} ${sent===1?'kirjaus lähetettiin':`kirjausta lähetettiin`} jaettuun ajolistaan. `:'';
+    setDriveMessage(check.exists?`Ajolista synkronoitu. ${moved}${check.filename} sisältää nyt ${check.days} päivää${check.vehicles.length?` (${check.vehicles.join(', ')})`:''}.`:'Ajolista luotiin ja päivä lähetettiin jaettuun kansioon.');
+   }catch(e){setDriveError(e instanceof Error?e.message:'Synkronointi epäonnistui. Kirjaukset säilyvät puhelimella.');}
+   finally{setDriveBusy(false);}
+  }
+
+  // Gives the vehicle its own section in the same file, so every vehicle keeps one section.
+  async function addVehicle(){
+   const reg=draft.values.vehicle;if(!reg||!template)return;setBusy(true);setError('');
+   try{
+     const filename=workbookName(kind,draft.values.date,name);
+     const cached=await storedWorkbook(kind,draft.values.date,name);
+    if(!cached?.bytes)throw new Error('Ajolistaa ei ole tallennettu. Avaa päivä ajolistaksi ensin.');
+    const bytes=addVehicleSection(cached.bytes,reg,name,{consumption:'0',emission:'0'});
+    await saveVehicle(reg,{consumption:'0',emission:'0'});
+    const dir=await getStored<boolean>(`imported:${filename}`)?undefined:await sharedDirectory();
+    let savedToFolder=false;
+    if(dir){await permit(dir);savedToFolder=await writeWorkbook(dir,filename,bytes,await readWorkbook(dir,filename));}
+    await putStored(`workbook:${filename}`,{filename,bytes,kind:'pamark',updatedAt:new Date().toISOString(),savedToFolder} satisfies SavedWorkbook);
+    setUnknown('');setSaved(false);setMessage(`Autolle ${reg} lisättiin oma osio listaan. Tallenna päivä uudelleen. Päästö- ja kulutusarvot voit asettaa kohdasta Ajoneuvot.`);
+    window.dispatchEvent(new Event('local-workbooks-changed'));
+   }catch(e){setError(e instanceof Error?e.message:'Auton lisääminen epäonnistui.');}finally{setBusy(false);}
+  }
+
+  async function download(){try{const file=await storedWorkbook(kind,draft.values.date,name);if(file)downloadWorkbook(file.filename,file.bytes);}catch{setError('Tiedoston vienti epäonnistui.');}}
+
+ const valid=Object.keys(validateDraft(kind,draft)).length===0;
+
+ return <section className="local-save"><h2>Tallenna puhelimeen</h2><p className="hint">XLSX-tiedosto tallennetaan alussa valittuun paikalliseen kansioon tai sovellusmuistiin. Tallennus toimii ilman internetiä.</p>
+
+ <p className="hint">Oikea tiedosto ja pohja valitaan automaattisesti. Omia pohjia voi vaihtaa asetuksissa.</p>
+
+ <p className="hint">{valid?workbookName(kind,draft.values.date,name):'Täytä puuttuvat kohdat ennen tallennusta.'}</p>
+
+ <button className="primary" disabled={!template||!valid||busy} onClick={()=>void save()}>{busy?'Tallennetaan…':'Tallenna puhelimeen'}</button>
+
+ {kind==='pamark'&&<button className="secondary" disabled={driveBusy||busy} onClick={()=>void syncDrive()}>{driveBusy?'Synkronoidaan…':'Synkronoi Driveen'}</button>}
+
+ {driveMessage&&<p role="status">{driveMessage}</p>}{driveError&&<p className="field-error" role="alert">{driveError}</p>}
+
+ {message&&<p role="status">{message}</p>}{error&&<p className="field-error" role="alert">{error}</p>}
+
+  {conflict&&<button className="secondary" disabled={busy} onClick={()=>void save(true)}>Korvaa oma paikallinen päiväkirjaus</button>}
+
+  {unknown&&<button className="secondary" disabled={busy} onClick={()=>void addVehicle()}>Lisää auto {unknown} omaan osioonsa listaan</button>}
+
+ {saved&&<><button className="secondary" onClick={()=>void download()}>Vie XLSX laitteen Tiedostot-kansioon</button><button className="secondary" onClick={onNew}>Aloita uusi päivä</button></>}
+
+ </section>;
+
+}
+

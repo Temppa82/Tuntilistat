@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {syncStep} from '../lib/sync-step';
+const ready={network:true,connected:true,ready:true,folderId:'a',pending:[{folderId:'a'}]};
+assert.equal(syncStep(ready).action,'sync');
+assert.equal(syncStep({...ready,network:false}).action,'offline');
+assert.equal(syncStep({...ready,connected:false,ready:false}).action,'prepare');
+assert.equal(syncStep({...ready,connected:false}).action,'connect');
+assert.equal(syncStep({...ready,folderId:undefined}).action,'folder');
+assert.equal(syncStep({...ready,pending:[]}).action,'empty');
+assert.equal(syncStep({...ready,pending:[{folderId:'b'}]}).action,'folder');
+assert.equal(syncStep({...ready,pending:[{}]}).action,'sync');
+console.log('PASS: sync prerequisites, expired login, unsaved draft, wrong folder, ready jobs');

@@ -1,0 +1,28 @@
+import {chromium} from 'file:///C:/Users/teemu/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const browser=await chromium.launch({headless:true,channel:'msedge'});const context=await browser.newContext();let page=await context.newPage();
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const base=process.env.BASE_URL||'http://127.0.0.1:5174';
+await page.goto(base);
+await page.evaluate(async ({pamark})=>{
+ const {initialState,steps}=await import('/lib/capture.ts');const {putStored}=await import('/lib/local-files.ts');const {writeLocal}=await import('/lib/local-capture.ts');
+ await putStored('setup:complete',true);await putStored('storage:choice',{mode:'browser',name:'Sovellusmuisti'});
+ await putStored('workbook:Pamark ajolista syyskuu 1-2 2026.xlsx',{filename:'Pamark ajolista syyskuu 1-2 2026.xlsx',bytes:new Uint8Array(pamark),kind:'pamark',savedToFolder:false});
+ const s=initialState();s.name='Testi Testiajo';s.nameLocked=true;s.active='pamark';s.drafts.pamark.values.date='2026-09-01';s.drafts.pamark.values.vehicle='JTS-790';s.drafts.pamark.step=steps.pamark.length;await writeLocal(s);
+},{pamark:[...readFileSync('work/listat-fixtures/Pamark ajolista syyskuu 1-2 2026.xlsx')]});
+await page.reload();await page.getByText('349717',{exact:false}).first().waitFor();
+const review=()=>page.locator('.capture-review');
+assert.ok((await review().innerText()).includes('06:00'));
+await review().locator('dl > div').last().getByRole('button',{name:'Muokkaa',exact:true}).click();await page.locator('textarea').fill('OMA LUONNOS');
+const day=()=>page.locator('section').filter({has:page.getByRole('heading',{name:'Avaa päivä',exact:true})});
+await day().getByLabel('Ajoneuvo').fill('ZLC-613');await day().getByRole('button',{name:'Avaa päivän tiedot',exact:true}).click();await review().waitFor();assert.ok(!(await review().innerText()).includes('OMA LUONNOS'));
+await day().getByLabel('Ajoneuvo').fill('JTS-790');await day().getByRole('button',{name:'Avaa päivän tiedot',exact:true}).click();await page.getByRole('button',{name:'Jatka luonnosta',exact:true}).click();await page.locator('textarea').waitFor();assert.equal(await page.locator('textarea').inputValue(),'OMA LUONNOS');
+await page.getByRole('button',{name:'Tarkista',exact:true}).click();await review().waitFor();
+await page.getByRole('button',{name:'Tallenna puhelimeen',exact:true}).click();await page.getByRole('button',{name:'Korvaa oma paikallinen päiväkirjaus'}).click();await page.getByText('Ajolista on tallessa tällä laitteella.',{exact:true}).waitFor();
+await page.close();page=await context.newPage();await page.goto(base);await review().waitFor();assert.ok((await review().innerText()).includes('OMA LUONNOS'));
+await page.getByRole('button',{name:'Tunnit Henkilökohtainen tuntilista'}).click();await page.locator('input[type=file]').setInputFiles('work/listat-fixtures/Tuntilista Ajuri.xlsx');await review().waitFor();assert.ok((await review().innerText()).includes('2025-03-03'));
+await day().getByLabel('Päivämäärä').fill('2025-03-06');await day().getByRole('button',{name:'Avaa päivän tiedot',exact:true}).click();await page.getByText('441519',{exact:false}).first().waitFor();
+assert.ok((await review().innerText()).includes('Vantaa - Espoo - Vantaa'));
+await page.getByRole('button',{name:'Pamark ajolista Päivittäiset ajot laskutukseen'}).click();await review().waitFor();assert.ok((await review().innerText()).includes('OMA LUONNOS'));
+assert.deepEqual(errors,[]);await page.screenshot({path:'work/ui-v25.png',fullPage:true});await browser.close();console.log('PASS browser: real Pamark hydrate, car switch, draft conflict choice, local correction, close/reopen, actual hours import/read, list switch');

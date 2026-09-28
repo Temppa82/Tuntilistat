@@ -1,0 +1,28 @@
+# Testit ajetaan jokaisella pushilla ja vetopyynnölle. Näin vika, joka rikkoo
+# ohjelman, ilmenee ennen julkaisua eikä jää huomaamatta.
+name: Testit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # npm ci lukitsee versiot package-lock.jsonista, joten CI ei koskaan asenna
+      # jotain muuta kuin mitä on testattu omalla koneella.
+      - run: npm ci
+
+      # Testit generoivat omat Excel-pohjansa upotetusta datasta, joten repo ei
+      # tarvitse mukana mitään henkilökohtaisia tiedostoja.
+      - run: npm test
