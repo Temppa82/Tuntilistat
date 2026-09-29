@@ -6,6 +6,7 @@ import {validateDraft} from '@/lib/capture';
 
 
 import {fillWorkbook,workbookName,EntryConflict,type EntryCellDiff} from '@/lib/workbook-export';
+import {sheetDate} from '@/lib/pamark-target';
 
 import {getStored,putStored,digest,downloadWorkbook,sharedDirectory,permit,readWorkbook,writeWorkbook,type SavedWorkbook} from '@/lib/local-files';
 
@@ -151,9 +152,9 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
 
  {message&&<p role="status">{message}</p>}{error&&<p className="field-error" role="alert">{error}</p>}
 
-  {conflict&&<Dialog open onOpenChange={v=>{if(!v)setConflict(false);}}><DialogContent><DialogTitle>Päivälle on jo erilainen kirjaus</DialogTitle><DialogDescription>Tiedostossa on samalle päivälle tai samalle autolle jo muita arvoja kuin nämä. Tarkista korvattavat kohdat. Muut päivät ja toisen auton kirjaukset eivät muutu.</DialogDescription>{dayDiffs.length>0&&<dl className="conflict-diffs">{dayDiffs.map(d=><div key={d.col}><dt>{d.col}</dt><dd>{d.old!==''?d.old:'tyhjä'} → {d.new??'tyhjä'}</dd></div>)}</dl>}{routeDiffs.length>0&&<p className="hint">Reitti: {routeDiffs.map(d=>`${d.old!==''?d.old:'tyhjä'} → ${d.new??'tyhjä'}`).join(' · ')}</p>}{dateDiffs.length>0&&<p className="hint">Päivämäärä kohdassa {dateDiffs.map(d=>d.col).join(', ')} poikkeaa. Tarkista valittu päivä.</p>}{dayDiffs.length===0&&routeDiffs.length===0&&dateDiffs.length===0&&<p className="hint">Erilaista ei löytynyt solukohtaisesti. Tarkista valittu päivä.</p>}<p className="hint">Laskukaavat säilyvät.</p><button disabled={busy} onClick={()=>void save(true)}>{busy?'Korvataan…':'Korvaa nämä arvot'}</button><button onClick={()=>setConflict(false)}>Peruuta</button></DialogContent></Dialog>}
+  {conflict&&<Dialog open onOpenChange={v=>{if(!v)setConflict(false);}}><DialogContent><DialogTitle>Päivälle on jo erilainen kirjaus</DialogTitle><DialogDescription>Tiedostossa on samalle päivälle tai samalle autolle jo muita arvoja kuin nämä. Tarkista korvattavat kohdat. Muut päivät ja toisen auton kirjaukset eivät muutu.</DialogDescription><ConflictTarget diffs={diffs} selectedDate={draft.values.date}/>{dayDiffs.length>0&&<dl className="conflict-diffs">{dayDiffs.map(d=><div key={d.col}><dt>{d.col}</dt><dd>{d.old!==''?d.old:'tyhjä'} → {d.new??'tyhjä'}</dd></div>)}</dl>}{routeDiffs.length>0&&<p className="hint">Reitti: {routeDiffs.map(d=>`${d.old!==''?d.old:'tyhjä'} → ${d.new??'tyhjä'}`).join(' · ')}</p>}{dateDiffs.length>0&&<p className="hint">Päivämäärä kohdassa {dateDiffs.map(d=>d.col).join(', ')} poikkeaa. Tarkista valittu päivä.</p>}{dayDiffs.length===0&&routeDiffs.length===0&&dateDiffs.length===0&&<p className="hint">Erilaista ei löytynyt solukohtaisesti. Tarkista valittu päivä.</p>}<p className="hint">Laskukaavat säilyvät.</p><button disabled={busy} onClick={()=>void save(true)}>{busy?'Korvataan…':'Korvaa nämä arvot'}</button><button onClick={()=>setConflict(false)}>Peruuta</button></DialogContent></Dialog>}
 
-  {driveConflict&&<Dialog open onOpenChange={v=>{if(!v)setDriveConflict(null);}}><DialogContent><DialogTitle>Jaetussa ajolistassa on jo tämä kirjaus</DialogTitle><DialogDescription>Jaetussa tiedostossa on jo rivi tälle autolle ja päivälle, ja sen arvot eroavat näistä. Muut autot ja päivät eivät muutu.</DialogDescription><ConflictCells diffs={driveConflict}/><button disabled={driveBusy} onClick={()=>void (async()=>{await forcePendingJobs(draft.values.date,draft.values.vehicle);setDriveConflict(null);await syncDrive();})()}>{driveBusy?'Korvataan ja lähetetään…':'Korvaa jaetun tiedoston rivi omilla arvoilla'}</button><button onClick={()=>setDriveConflict(null)}>Peruuta</button></DialogContent></Dialog>}
+  {driveConflict&&<Dialog open onOpenChange={v=>{if(!v)setDriveConflict(null);}}><DialogContent><DialogTitle>Jaetussa ajolistassa on jo tämä kirjaus</DialogTitle><DialogDescription>Jaetussa tiedostossa on jo rivi tälle autolle ja päivälle, ja sen arvot eroavat näistä. Muut autot ja päivät eivät muutu.</DialogDescription><ConflictCells diffs={driveConflict} selectedDate={draft.values.date}/><button disabled={driveBusy} onClick={()=>void (async()=>{await forcePendingJobs(draft.values.date,draft.values.vehicle);setDriveConflict(null);await syncDrive();})()}>{driveBusy?'Korvataan ja lähetetään…':'Korvaa jaetun tiedoston rivi omilla arvoilla'}</button><button onClick={()=>setDriveConflict(null)}>Peruuta</button></DialogContent></Dialog>}
 
   {unknown&&<button className="secondary" disabled={busy} onClick={()=>void addVehicle()}>Lisää auto {unknown} omaan osioonsa listaan</button>}
 
@@ -163,13 +164,24 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
 
 }
 
-function ConflictCells({diffs}:{diffs:EntryCellDiff[]}){
+function ConflictTarget({diffs,selectedDate}:{diffs:EntryCellDiff[];selectedDate:string}){
+  if(!diffs.length)return null;
+  const row=/^\D*(\d+)$/.exec(diffs[0].col)?.[1];
+  const storedA=diffs.find(d=>d.col==='A'+row)?.old;
+  const parsed=sheetDate(storedA);
+  const stored=storedA==null||storedA===''
+    ?'ei päivämäärää'
+    :`${parsed??'tunnistamaton arvo '+(String(storedA))}`;
+  return <p className="hint">Kohderivi {row??'?'}: siinä olevan päivän arvo {stored} · valitsemasi päivä {selectedDate}.</p>;
+}
+
+function ConflictCells({diffs,selectedDate}:{diffs:EntryCellDiff[];selectedDate:string}){
   const isFilled=(v:unknown)=>v!==null&&v!==undefined&&v!=='';
   const hasReitti=(s:string|number|null|undefined)=>/^Reitti:|^\s*Reitti\b/.test(String(s??''));
   const day=diffs.filter(d=>isFilled(d.old)&&!d.col.startsWith('A'));
   const route=diffs.filter(d=>d.col.startsWith('A')&&(hasReitti(d.old)||hasReitti(d.new)));
   const date=diffs.filter(d=>d.col.startsWith('A')&&!hasReitti(d.old)&&!hasReitti(d.new)&&isFilled(d.old));
   if(diffs.length===0)return <p className="hint">Erilaista ei löytynyt solukohtaisesti. Tarkista valittu päivä.</p>;
-  return <>{day.length>0&&<dl className="conflict-diffs">{day.map(d=><div key={d.col}><dt>{d.col}</dt><dd>{d.old!==''?d.old:'tyhjä'} → {d.new??'tyhjä'}</dd></div>)}</dl>}{route.length>0&&<p className="hint">Reitti: {route.map(d=>`${d.old!==''?d.old:'tyhjä'} → ${d.new??'tyhjä'}`).join(' · ')}</p>}{date.length>0&&<p className="hint">Päivämäärä kohdassa {date.map(d=>d.col).join(', ')} poikkeaa. Tarkista valittu päivä.</p>}<p className="hint">Laskukaavat säilyvät.</p></>;
+  return <><ConflictTarget diffs={diffs} selectedDate={selectedDate}/>{day.length>0&&<dl className="conflict-diffs">{day.map(d=><div key={d.col}><dt>{d.col}</dt><dd>{d.old!==''?d.old:'tyhjä'} → {d.new??'tyhjä'}</dd></div>)}</dl>}{route.length>0&&<p className="hint">Reitti: {route.map(d=>`${d.old!==''?d.old:'tyhjä'} → ${d.new??'tyhjä'}`).join(' · ')}</p>}{date.length>0&&<p className="hint">Päivämäärä kohdassa {date.map(d=>d.col).join(', ')} poikkeaa. Tarkista valittu päivä.</p>}<p className="hint">Laskukaavat säilyvät.</p></>;
 }
 
