@@ -84,3 +84,13 @@ export function downloadWorkbook(filename:string,bytes:Uint8Array){
   const url=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
   const anchor=document.createElement('a');anchor.href=url;anchor.download=filename;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
+// Avaa puhelimen jakovalikon (sähköposti, WhatsApp jne.) liitteenä olevalla XLSX-tiedostolla.
+// Selaimissa ilman Web Share -tukea tiedosto ladataan ladattuna kopiona, jolloin käyttäjä
+// voi liittää sen itse. Paluuarvo kertoo, kumpi tapa käytettiin.
+export async function shareWorkbook(filename:string,bytes:Uint8Array){
+  const type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const shareFile=new File([new Uint8Array(bytes)],filename,{type});
+  const withShare=navigator as Navigator&{share?:{({files,title}:{files:File[];title?:string}):Promise<void>};canShare?:(data:{files:File[]})=>boolean};
+  if(!withShare.share||!withShare.canShare||!withShare.canShare({files:[shareFile]})){downloadWorkbook(filename,new Uint8Array(bytes));return false;}
+  await withShare.share({files:[shareFile],title:filename});return true;
+}

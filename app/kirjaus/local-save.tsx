@@ -8,7 +8,7 @@ import {validateDraft} from '@/lib/capture';
 import {fillWorkbook,workbookName,EntryConflict,type EntryCellDiff} from '@/lib/workbook-export';
 import {sheetDate} from '@/lib/pamark-target';
 
-import {getStored,putStored,digest,downloadWorkbook,sharedDirectory,permit,readWorkbook,writeWorkbook,type SavedWorkbook} from '@/lib/local-files';
+import {getStored,putStored,digest,downloadWorkbook,sharedDirectory,permit,readWorkbook,writeWorkbook,shareWorkbook,type SavedWorkbook} from '@/lib/local-files';
 
 import {ensurePeriod,storedWorkbook} from '@/lib/period-files';
 import {addVehicleSection} from '@/lib/add-vehicle';
@@ -18,6 +18,7 @@ import {loadTemplate,type ListTemplate} from '@/lib/templates';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import {prepareGoogle,connectGoogle,connected,savedDriveFolder} from '@/lib/google-drive';
 import {enqueuePamark,flushPamark,checkSharedList,forcePendingJobs} from '@/lib/pamark-sync';
+import {sendHoursWorkbook,HoursDriveConflict} from '@/lib/hours-drive';
 
 
 
@@ -25,6 +26,7 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
 
   const [template,setTemplate]=useState<ListTemplate>(),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(''),[saved,setSaved]=useState(false),[conflict,setConflict]=useState(false),[unknown,setUnknown]=useState('');
   const [driveBusy,setDriveBusy]=useState(false),[driveMessage,setDriveMessage]=useState(''),[driveError,setDriveError]=useState('');
+  const [hoursDriveBusy,setHoursDriveBusy]=useState(false),[hoursDriveMessage,setHoursDriveMessage]=useState(''),[hoursDriveError,setHoursDriveError]=useState(''),[hoursDriveOverwrite,setHoursDriveOverwrite]=useState(false);
   // Jaetun ajolistan ristiriita erotetaan muista virheistä, jotta käyttäjä voi
   // päättää oman rivinsä korvaamisesta sen sijaan, että synkronointi jää jumiin.
   // Ristiriita voi kuulua mihin tahansa jonotettuun kirjaukseen, ei vain avoinna
@@ -154,6 +156,34 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
 
   async function download(){try{const file=await storedWorkbook(kind,draft.values.date,name);if(file)downloadWorkbook(file.filename,file.bytes);}catch{setError('Tiedoston vienti epäonnistui.');}}
 
+  // Lähettää valmiin tuntilistan sellaisenaan valittuun jaettuun Drive-kansioon.
+  // Tuntilista on kuljettajan oma tiedosto, joten mitään ei sulauteta. Samanniminen
+  // erilainen tiedosto estetään, kunnes käyttäjä nimenomaisesti valitsee korvaamisen.
+  async function sendHoursDrive(overwrite=false){
+   if(kind!=='hours')return;setHoursDriveBusy(true);setHoursDriveError('');setHoursDriveMessage('');setHoursDriveOverwrite(false);
+   try{
+    if(!connected()){await prepareGoogle();await connectGoogle();}
+    const folder=await savedDriveFolder();
+    if(!folder)throw new Error('Valitse jaettu Drive-kansio kohdasta Asetukset.');
+    const filename=workbookName(kind,draft.values.date,name);
+    const file=await storedWorkbook(kind,draft.values.date,name);
+    if(!file?.bytes)throw new Error('Tallenna tuntilista ensin Tallenna puhelimeen -painikkeella.');
+    const outcome=await sendHoursWorkbook(folder.id,filename,file.bytes,overwrite);
+    setHoursDriveOverwrite(false);
+    setHoursDriveMessage(outcome==='unchanged'?`Tuntilista on jo Drivessä (${folder.name}): ${filename}. Mitään ei muutettu.`:outcome==='created'?`Tuntilista lähetetty jaettuun kansioon (${folder.name}): ${filename}.`:`Tuntilista korvattiin Drivessä (${folder.name}): ${filename}.`);
+   }catch(e){
+    if(e instanceof HoursDriveConflict){setHoursDriveOverwrite(true);setHoursDriveError('Kansiossa on jo erilainen versio tästä tuntilistasta. Lähetä vain jos haluat korvata sen.');return;}
+    setHoursDriveError(e instanceof Error?e.message:'Lähetys Driveen epäonnistui. Tuntilista säilyy puhelimella.');
+   }finally{setHoursDriveBusy(false);}
+  }
+
+  // Avaa jakovalikon, josta tiedosto lähtee esimerkiksi sähköpostiin. Sen selaimen
+  // varalle, jossa jakovalikkoa ei ole, tiedosto ladataan Tiedostot-kansioon.
+  async function share(){
+   try{const file=await storedWorkbook(kind,draft.values.date,name);if(!file)throw new Error('Tallenna lista ensin puhelimeen.');const sent=await shareWorkbook(file.filename,file.bytes);if(!sent)setMessage('Selain ei avannut jakovalikkoa, joten tiedosto ladattiin Tiedostot-kansioon.');}
+   catch(e){setError(e instanceof Error?e.message:'Jakaminen epäonnistui.');}
+  }
+
  const valid=Object.keys(validateDraft(kind,draft)).length===0;
 
  return <section className="local-save"><h2>Tallenna puhelimeen</h2><p className="hint">XLSX-tiedosto tallennetaan alussa valittuun paikalliseen kansioon tai sovellusmuistiin. Tallennus toimii ilman internetiä.</p>
@@ -166,7 +196,11 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
 
  {kind==='pamark'&&<button className="secondary" disabled={driveBusy||busy} onClick={()=>void syncDrive()}>{driveBusy?'Synkronoidaan…':'Synkronoi Driveen'}</button>}
 
+ {kind==='hours'&&<button className="secondary" disabled={hoursDriveBusy||busy} onClick={()=>void sendHoursDrive()}>{hoursDriveBusy?'Lähetetään…':'Lähetä Driveen'}</button>}
+
  {driveMessage&&<p role="status">{driveMessage}</p>}{driveError&&<p className="field-error" role="alert">{driveError}</p>}
+
+ {hoursDriveMessage&&<p role="status">{hoursDriveMessage}</p>}{hoursDriveError&&<p className="field-error" role="alert">{hoursDriveError}</p>}{hoursDriveOverwrite&&<button className="secondary" disabled={hoursDriveBusy||busy} onClick={()=>void sendHoursDrive(true)}>{hoursDriveBusy?'Korvataan…':'Lähetä silti ja korvaa kansion version'}</button>}
 
  {message&&<p role="status">{message}</p>}{error&&<p className="field-error" role="alert">{error}</p>}
 
@@ -176,7 +210,7 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
 
   {unknown&&<button className="secondary" disabled={busy} onClick={()=>void addVehicle()}>Lisää auto {unknown} omaan osioonsa listaan</button>}
 
- {saved&&<><button className="secondary" onClick={()=>void download()}>Vie XLSX laitteen Tiedostot-kansioon</button><button className="secondary" onClick={onNew}>Aloita uusi päivä</button></>}
+ {saved&&<><button className="secondary" onClick={()=>void share()}>Jaa</button><button className="secondary" onClick={()=>void download()}>Vie XLSX laitteen Tiedostot-kansioon</button><button className="secondary" onClick={onNew}>Aloita uusi päivä</button></>}
 
  </section>;
 
