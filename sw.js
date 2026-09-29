@@ -1,4 +1,4 @@
-const BASE=new URL('./',self.location.href),PREFIX='ajolista-local-'+BASE.pathname+'-',CACHE=PREFIX+"2.13.1-3555d3baf65b6ec5",URLS=["icon-192.png","icon-512.png","index.css","index.html","index.js","manifest.webmanifest"].map(p=>new URL(p,BASE).href),LIVE=["index.css","index.js"].map(p=>new URL(p,BASE).href);
+const BASE=new URL('./',self.location.href),PREFIX='ajolista-local-'+BASE.pathname+'-',CACHE=PREFIX+"2.13.2-69f6345b80e4756f",URLS=["icon-192.png","icon-512.png","index.css","index.html","index.js","manifest.webmanifest"].map(p=>new URL(p,BASE).href),LIVE=["index.css","index.js"].map(p=>new URL(p,BASE).href);
 // Nimet ovat vakiintuneet, joten HTTP-välimuisti on ohitettava pakotetusti.
 // Ilman tätä uusi välimuisti täytyisi vanhalla index.js:llä ja päivitys jäisi ikuisesti odottamaan.
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(c=>c.addAll(URLS.map(u=>new Request(u,{cache:'reload'})))).then(()=>self.skipWaiting())));
