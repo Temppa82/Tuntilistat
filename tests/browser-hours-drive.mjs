@@ -17,9 +17,14 @@ window.google={accounts:{oauth2:{initTokenClient:c=>({requestAccessToken:()=>c.c
 await page.route('**/js/api.js',r=>r.fulfill({contentType:'application/javascript',body:`window.gapi={load:(n,o)=>o.callback()};`}));
 
 // Jakovalikko korvataan tallennettavalla jonolla, jotta testi näkee, mitä jaettaisiin.
+// Rajatapauksena jakovalikko voi myös hylätä tiedoston: Chrome ei tue xlsx-jakoa, jolloin
+// se hylkää NotAllowedError-virheellä. Sovelluksen on ladattava tiedosto silloin.
 await context.addInitScript(()=>{
  Object.defineProperty(navigator,'canShare',{value:()=>true,configurable:true});
- Object.defineProperty(navigator,'share',{value:data=>{(window.__shares=(window.__shares||[])).push({files:(data.files||[]).map(f=>f.name)});},configurable:true});
+ Object.defineProperty(navigator,'share',{value:data=>{
+  if(window.__shareReject)return Promise.reject(new DOMException('Permission denied','NotAllowedError'));
+  (window.__shares=(window.__shares||[])).push({files:(data.files||[]).map(f=>f.name)});
+ },configurable:true});
 });
 
 let remote=undefined,version=1,creates=0,uploads=0,reads=0,lists=0;
@@ -112,7 +117,17 @@ const download=page.waitForEvent('download');
 await page.getByRole('button',{name:'Jaa',exact:true}).click();
 assert.equal((await download).suggestedFilename(),filename,'varavalinta latasi tuntilistan');
 
+// 6) Jakovalikko hylkää xlsx:n: Chrome antaa canShare:n ymmärtää tuen olevan olemassa,
+//    mutta share hylkää NotAllowedError: 'Permission denied'. Silloin ladataan
+//    Tiedostot-kansioon ja näytetään selkokielinen viesti, ei raakaa virhettä.
+await page.evaluate(()=>{Object.defineProperty(navigator,'canShare',{value:()=>true,configurable:true});window.__shareReject=true;});
+const fallback=page.waitForEvent('download');
+await page.getByRole('button',{name:'Jaa',exact:true}).click();
+assert.equal((await fallback).suggestedFilename(),filename,'hylätty xlsx-jako laskeutuu lataukseksi');
+await page.getByText('ladattiin Tiedostot-kansioon',{exact:false}).waitFor({timeout:15000});
+assert.equal(await page.getByText('Permission denied',{exact:false}).count(),0,'raakaa hakkuvirhettä ei näytetä käyttäjälle');
+
 assert.deepEqual(errors,[]);
 await page.screenshot({path:'work/ui-hours-drive.png',fullPage:true});
 await browser.close();
-console.log('PASS browser: tuntilista lähtee Driveen (luonti/korvaus/jarjestys) ja Jaa (jakovalikko + latausvaravalinta)');
+console.log('PASS browser: tuntilista lähtee Driveen (luonti/korvaus/jarjestys) ja Jaa (jakovalikko + latausvaravalinnat + xlsx-kielto)');

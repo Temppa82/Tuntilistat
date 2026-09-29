@@ -177,10 +177,12 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
    }finally{setHoursDriveBusy(false);}
   }
 
-  // Avaa jakovalikon, josta tiedosto lähtee esimerkiksi sähköpostiin. Sen selaimen
-  // varalle, jossa jakovalikkoa ei ole, tiedosto ladataan Tiedostot-kansioon.
+  // Avaa jakovalikon, josta tiedosto lähtee esimerkiksi sähköpostiin. XLSX ei kuulu
+  // jakovalikon tuettuihin tyyppeihin monissa selaimissa, jolloin jakaminen epäonnistuu
+  // "Permission denied" -virheellä. Silloin tiedosto ladataan Tiedostot-kansioon ja
+  // kerrotaan, mistä löytyy ja että se on liitettävissä sähköpostiin.
   async function share(){
-   try{const file=await storedWorkbook(kind,draft.values.date,name);if(!file)throw new Error('Tallenna lista ensin puhelimeen.');const sent=await shareWorkbook(file.filename,file.bytes);if(!sent)setMessage('Selain ei avannut jakovalikkoa, joten tiedosto ladattiin Tiedostot-kansioon.');}
+   try{const file=await storedWorkbook(kind,draft.values.date,name);if(!file)throw new Error('Tallenna lista ensin puhelimeen.');const status=await shareWorkbook(file.filename,file.bytes);if(status==='downloaded')setMessage('Jakovalikko ei tue XLSX-tiedoston jakoa tässä selaimessa, joten tiedosto ladattiin Tiedostot-kansioon. Liitä se sähköpostiin sieltä.');}
    catch(e){setError(e instanceof Error?e.message:'Jakaminen epäonnistui.');}
   }
 
