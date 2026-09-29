@@ -4,8 +4,14 @@ import { pamarkTemplate, pamarkDayRows, pamarkEntryColumns, pamarkEntryCells } f
 import { hoursTemplate, hoursEntryCells } from './hours-template';
 import { months, normalizeVehicle, parseNumber, validateDraft, validDate, type Draft, type ListKind } from './capture';
 
+export type EntryCellDiff = { col: string; old: string | number | null | undefined; new: string | number | null | undefined };
 export class EntryConflict extends Error {
-  constructor() { super('Tälle päivälle on jo erilainen kirjaus. Tarkista tiedosto ennen korvaamista.'); this.name = 'EntryConflict'; }
+  diffs: EntryCellDiff[] = [];
+  constructor(diffs: EntryCellDiff[] = []) {
+    super('Tälle päivälle on jo erilainen kirjaus. Tarkista tiedosto ennen korvaamista.');
+    this.name = 'EntryConflict';
+    this.diffs = diffs;
+  }
 }
 export function workbookName(kind: ListKind, date: string, name: string) {
   if (!validDate(date)) throw new Error('Virheellinen päivämäärä.');
@@ -45,7 +51,7 @@ export function validateTemplate(doc: XlsxDocument, kind: ListKind) {
     if (!headers.length || headers.some(h => !pamarkTemplate.requiredFormulaColumns.every(c => s[`${c}${h+pamarkTemplate.firstDayOffset}`]?.formula))) throw new Error('Tiedosto ei vastaa Pamarkin ajolistan rakennetta. Jokaisella autolla on oma AUTO: -osio.');
   }
 }
-function clearTemplate(doc: XlsxDocument, kind: ListKind) {
+export function clearTemplate(doc: XlsxDocument, kind: ListKind) {
   const s = doc.snapshot();
   const clear = (a: string, value: string | null = null) => { if (s[a] && !s[a].formula) doc.set(a, value); };
   if (kind === 'hours') for (const r of hoursTemplate.entryRows) {
@@ -113,7 +119,15 @@ export function fillWorkbook(bytes: Uint8Array, kind: ListKind, draft: Draft, na
     const old=s[a]?.value;
     if (a===`A${row}`) return sheetDate(old)!==v.date;
     return typeof value==='number' && typeof old==='number' ? Math.abs(value-old)>1e-9 : old!==value;
-  })) throw new EntryConflict();
+  })) {
+    const diffs: EntryCellDiff[] = Object.entries(patch).map(([addr,value])=>({
+      col:addr,
+      old: s[addr]?.value ?? null,
+      new: value ?? null
+    }));
+    const conflict = new EntryConflict(diffs);
+    throw conflict;
+  }
   doc.patch(patch);
   if (kind==='hours') { doc.set('A1',`Kuljettaja: ${name.trim()}`); doc.set('G1',`VUOSI/KUUKAUSI: ${v.date.slice(0,4)}/${Number(v.date.slice(5,7))}`); }
   return {bytes:doc.bytes(),row,filename:workbookName(kind,v.date,name)};

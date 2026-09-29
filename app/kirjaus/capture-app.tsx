@@ -40,7 +40,7 @@ import {validDate} from '@/lib/capture';
 import {dayKey,sameDayValues,hasDayValues} from '@/lib/day-drafts';
 import {snapshot,noteStep,sameSnapshot,undoStep,type DraftSnapshot,type HistoryEntry} from '@/lib/draft-history';
 import {discardSavedDay} from '@/lib/remove-day';
- const APP_VERSION='2.13.0';
+ const APP_VERSION='2.13.1';
 
 
 export default function CaptureApp(){
@@ -146,7 +146,11 @@ export default function CaptureApp(){
   // Tyhjennetään vain juuri poistettu päivä; muut keskeneräiset luonnokset ja
   // toisen listan täyttö säilyvät. Oletuksena näytetään katsausnäkymä, jotta
   // käyttäjä näkee, että päivä on tyhjä eikä vain kadonnut näkyvistä.
-  function resetForm(selected:ListKind,date:string,vehicle:string,step=steps[selected].length){
+  // Tyhjennetyn lomakkeen oletusaskel on 0 eli ensimmäinen kysymys, sama mihin
+  // "Aloita uusi päivä" palaa. Aiemmin oletus oli steps.length, joka ohjasi
+  // tarkistusnäytölle: sieltä näkyivät vain ajoneuvo ja päivämäärä, ja lomake
+  // vaikutti silti olevan keskeneräinen vaikka luonnos oli poistettu.
+  function resetForm(selected:ListKind,date:string,vehicle:string,step=0){
    if(!state)return;
    const fresh=newDraft();fresh.values.date=date;fresh.values.vehicle=vehicle;fresh.step=step;
    entered.current[selected]=snapshot(fresh);setHistory(h=>({...h,[selected]:[]}));

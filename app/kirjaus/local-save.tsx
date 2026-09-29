@@ -5,7 +5,7 @@ import type {Draft,ListKind} from '@/lib/capture';
 import {validateDraft} from '@/lib/capture';
 
 
-import {fillWorkbook,workbookName,EntryConflict} from '@/lib/workbook-export';
+import {fillWorkbook,workbookName,EntryConflict,type EntryCellDiff} from '@/lib/workbook-export';
 
 import {getStored,putStored,digest,downloadWorkbook,sharedDirectory,permit,readWorkbook,writeWorkbook,type SavedWorkbook} from '@/lib/local-files';
 
@@ -14,6 +14,7 @@ import {addVehicleSection} from '@/lib/add-vehicle';
 import {saveVehicle} from '@/lib/vehicle-settings';
 
 import {loadTemplate,type ListTemplate} from '@/lib/templates';
+import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import {prepareGoogle,connectGoogle,connected,savedDriveFolder} from '@/lib/google-drive';
 import {enqueuePamark,flushPamark,checkSharedList} from '@/lib/pamark-sync';
 
@@ -23,6 +24,16 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
 
   const [template,setTemplate]=useState<ListTemplate>(),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(''),[saved,setSaved]=useState(false),[conflict,setConflict]=useState(false),[unknown,setUnknown]=useState('');
   const [driveBusy,setDriveBusy]=useState(false),[driveMessage,setDriveMessage]=useState(''),[driveError,setDriveError]=useState('');
+  // Ristiriidan vanhat arvot näytetään ennen korvaamista, jotta väärä päivä ei
+  // mene hiljaa toisen ajurin kirjauksen päälle.
+  const [diffs,setDiffs]=useState<EntryCellDiff[]>([]);
+
+  // Päivämäärä ja reitti näytetään omilla riveillään, muut solut soluosoitteensa mukaan.
+  const isFilled=(v:unknown)=>v!==null&&v!==undefined&&v!=='';
+  const hasReitti=(s:string|number|null|undefined)=>/^Reitti:|^\s*Reitti\b/.test(String(s??''));
+  const dayDiffs=diffs.filter(d=>isFilled(d.old)&&!d.col.startsWith('A'));
+  const routeDiffs=diffs.filter(d=>d.col.startsWith('A')&&(hasReitti(d.old)||hasReitti(d.new)));
+  const dateDiffs=diffs.filter(d=>d.col.startsWith('A')&&!hasReitti(d.old)&&!hasReitti(d.new)&&isFilled(d.old));
 
  useEffect(()=>{let live=true;loadTemplate(kind).then(t=>{if(live)setTemplate(t);}).catch(()=>setError('Listapohjaa ei voitu avata.'));return()=>{live=false;};},[kind]);
 
@@ -66,7 +77,7 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
     const queued=await queueForDrive(filename);
     if(queued)setMessage((current)=>current+' Päivä odottaa Driveen lähettämistä.');
 
-   }catch(e){const text=e instanceof Error?e.message:'Tallennus epäonnistui. Luonnos säilyy.';setConflict(e instanceof EntryConflict);
+   }catch(e){const text=e instanceof Error?e.message:'Tallennus epäonnistui. Luonnos säilyy.';setDiffs(e instanceof EntryConflict?e.diffs:[]);setConflict(e instanceof EntryConflict);
     // A vehicle that is not in the list yet is not an error the driver can fix by typing:
     // offer the new section instead of leaving a dead end.
     if(kind==='pamark'&&/Autoa ei löytynyt listapohjasta/.test(text)&&draft.values.vehicle){setUnknown(draft.values.vehicle);setError(`Autolla ${draft.values.vehicle} ei ole omaa osiota tässä ajolistassa.`);}else setError(text);}finally{setBusy(false);}
@@ -134,7 +145,7 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
 
  {message&&<p role="status">{message}</p>}{error&&<p className="field-error" role="alert">{error}</p>}
 
-  {conflict&&<button className="secondary" disabled={busy} onClick={()=>void save(true)}>Korvaa oma paikallinen päiväkirjaus</button>}
+  {conflict&&<Dialog open onOpenChange={v=>{if(!v)setConflict(false);}}><DialogContent><DialogTitle>Päivälle on jo erilainen kirjaus</DialogTitle><DialogDescription>Tiedostossa on samalle päivälle tai samalle autolle jo muita arvoja kuin nämä. Tarkista korvattavat kohdat. Muut päivät ja toisen auton kirjaukset eivät muutu.</DialogDescription>{dayDiffs.length>0&&<dl className="conflict-diffs">{dayDiffs.map(d=><div key={d.col}><dt>{d.col}</dt><dd>{d.old!==''?d.old:'tyhjä'} → {d.new??'tyhjä'}</dd></div>)}</dl>}{routeDiffs.length>0&&<p className="hint">Reitti: {routeDiffs.map(d=>`${d.old!==''?d.old:'tyhjä'} → ${d.new??'tyhjä'}`).join(' · ')}</p>}{dateDiffs.length>0&&<p className="hint">Päivämäärä kohdassa {dateDiffs.map(d=>d.col).join(', ')} poikkeaa. Tarkista valittu päivä.</p>}{dayDiffs.length===0&&routeDiffs.length===0&&dateDiffs.length===0&&<p className="hint">Erilaista ei löytynyt solukohtaisesti. Tarkista valittu päivä.</p>}<p className="hint">Laskukaavat säilyvät.</p><button disabled={busy} onClick={()=>void save(true)}>{busy?'Korvataan…':'Korvaa nämä arvot'}</button><button onClick={()=>setConflict(false)}>Peruuta</button></DialogContent></Dialog>}
 
   {unknown&&<button className="secondary" disabled={busy} onClick={()=>void addVehicle()}>Lisää auto {unknown} omaan osioonsa listaan</button>}
 

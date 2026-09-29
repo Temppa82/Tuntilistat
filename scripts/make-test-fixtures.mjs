@@ -1,6 +1,7 @@
 import {mkdirSync,writeFileSync,existsSync,readdirSync} from 'node:fs';
 import {DOMParser,XMLSerializer} from '@xmldom/xmldom';
 import {bundledTemplateBytes} from '../lib/templates-data';
+import {rawPamarkBytes} from './real-fixtures';
 import {XlsxDocument} from '../lib/xlsx-document';
 
 // Testien työpohjat luodaan sovellukseen upotetuista listapohjista. Näin testit
@@ -14,7 +15,10 @@ mkdirSync(dir,{recursive:true});
 mkdirSync(listat,{recursive:true});
 
 const hours=bundledTemplateBytes('hours');
-const pamark=bundledTemplateBytes('pamark');
+// Sovelluksen upotettu ajolista on puhdistettu kirjauksista, joten testit
+// käyttävät alkuperäistä täytettyä lähdettä erikseen. Näin ristiriitojen
+// säilyminen eli toisen ajurin päivän suoja testataan aidolla tiedostolla.
+const pamark=rawPamarkBytes();
 // Testipohjien kuljettajanimet kirjoitetaan samaan kuin itse pohjat, jotta
 // testit voivat käyttää omaa nimeään eivätkä puhujan oikeaa nimeä. Ajurit
 // tunnistavat oman listansa A1-solusta, joten nimen on oltava täsmälleen

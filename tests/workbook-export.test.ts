@@ -40,8 +40,9 @@ for(const kind of ['hours','pamark'] as const){
  const second=fillWorkbook(result.bytes,kind,next,'Testikuljettaja',{fresh:false});
  assert.notEqual(second.row,result.row);
  assert.equal(new XlsxDocument(second.bytes).snapshot()[`A${result.row}`].value,46266);
- const edit=structuredClone(draft);edit.values.endKm='1400';
- assert.throws(()=>fillWorkbook(second.bytes,kind,edit,'Testikuljettaja',{fresh:false}),EntryConflict);
+const edit=structuredClone(draft);edit.values.endKm='1400';
+  try{fillWorkbook(second.bytes,kind,edit,'Testikuljettaja',{fresh:false});throw new Error('odotettiin EntryConflictia');}
+  catch(e){assert.ok(e instanceof EntryConflict,'ristiriita ei ollut EntryConflict');assert.ok(e.diffs.length>0,'ristiriidasta ei toimitettu eroavia soluja');assert.ok(e.diffs.some(d=>d.col.startsWith('E')&&d.old===1200&&d.new===1400),'eriarvoisia soluja puuttui');}
  const corrected=fillWorkbook(second.bytes,kind,edit,'Testikuljettaja',{fresh:false,overwrite:true});
  assert.equal(new XlsxDocument(corrected.bytes).snapshot()[`E${result.row}`].value,1400);
  const otherMonth=structuredClone(draft);otherMonth.values.date='2026-08-31';

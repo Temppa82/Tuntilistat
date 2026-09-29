@@ -85,8 +85,21 @@ assert.equal(removed.formulas,setup.formulas,`kaavojen määrä muuttui: ${remov
 assert.equal(removed.cells,setup.cells,'poisto muutti solujen määrää');
 assert.equal(removed.draft,undefined,'päivän välimuistiluonnos jäi sovellusmuistiin');
 // Poistettu päivä ei saa jäädä lomakkeeseen, muuten tallennus kirjoittaisi sen
-// heti takaisin. Katsausnäkymässä vain päivämäärä on täytetty.
-assert.equal(await page.locator('.capture-review dd',{hasText:'Puuttuu'}).count(),11,'lomake ei tyhjentynyt');
+// heti takaisin. Tyhjennys palaa ensimmäiseen kysymykseen samaan tapaan kuin
+// "Aloita uusi päivä", jolloin vanhat arvot eivät näy missään.
+// Aiemmin palattiin katsausnäytölle, jossa näkyi vain ajoneuvo ja päivämäärä,
+// ja se näytti silti keskeneräiseltä vaikka luonnos oli poistettu.
+assert.equal(await page.locator('.capture-review').count(),0,'poisto jätti katsausnäytön näkyviin');
+assert.equal(await page.locator('#question-label').innerText(),'Ajoneuvo?','poisto ei palannut ensimmäiseen kysymykseen');
+const emptied=await page.evaluate(async ({name,date})=>{
+  const {getStored}=await import('/lib/local-files.ts');
+  const {dayKey}=await import('/lib/day-drafts.ts');
+  const {initialState,steps}=await import('/lib/capture.ts');
+  const s=initialState();
+  return {draft:await getStored(dayKey('hours',name,date,'')),step:s.drafts.hours.step,len:steps.hours.length};
+},{name,date:setup.date});
+assert.equal(emptied.draft,undefined,'poistettu luonnos jäi välimuistiin');
+assert.ok(emptied.step<emptied.len,'poisto jätti lomakkeen katsausnäytölle');
 
 // --- Vaiheittainen Kumoa ---
 const free='2025-03-20';
@@ -158,7 +171,9 @@ await dialog.waitFor();
 await dialog.getByRole('button',{name:'Hylkää päivä'}).click();
 await page.getByText('Päivän täyttö hylättiin',{exact:false}).waitFor();
 // Päivää ei ollut tallennettu, joten lomake tyhjentyi mutta tiedosto ei muuttunut.
-assert.equal(await page.locator('.capture-review dd',{hasText:'Puuttuu'}).count(),11,'hylkäys ei tyhjentänyt lomaketta');
+// Tyhjennys palaa ensimmäiseen kysymykseen, ei katsausnäytölle.
+assert.equal(await page.locator('.capture-review').count(),0,'hylkäys jätti katsausnäytön näkyviin');
+assert.equal(await page.locator('#question-label').innerText(),'Ajoneuvo?','hylkäys ei palannut ensimmäiseen kysymykseen');
 assert.ok((await page.locator('.capture-undo-hint').innerText()).includes('Päivän täyttö hylättiin'),'hylkäyksestä ei kerrottu');
 const kept=await page.evaluate(async file=>{const {getStored}=await import('/lib/local-files.ts');const {XlsxDocument}=await import('/lib/xlsx-document.ts');
  const sheet=new XlsxDocument((await getStored(`workbook:${file}`)).bytes).snapshot();

@@ -17,3 +17,7 @@
 .capture-undo .text-button:disabled{opacity:.45;text-decoration:none;cursor:default}
 .capture-undo button.discard{color:#8a2b2b}
 .capture-undo-hint{margin:0;text-align:center}
+.conflict-diffs{margin:16px 0;display:grid;gap:8px;max-height:220px;overflow-y:auto}
+.conflict-diffs>div{display:flex;gap:12px;align-items:baseline;padding:8px 10px;background:#f8fafc;border:1px solid #dce5ed;border-radius:8px}
+.conflict-diffs dt{font-weight:600;min-width:44px}
+.conflict-diffs dd{margin:0;overflow-wrap:anywhere}
