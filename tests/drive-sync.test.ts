@@ -4,7 +4,7 @@ import {DOMParser,XMLSerializer} from '@xmldom/xmldom';
 import 'fake-indexeddb/auto';
 import {connectGoogle,setDriveFolder,findDriveWorkbook,uploadDriveWorkbook,DriveConflict,XLSX_MIME} from '../lib/google-drive';
 import {putStored,getStored} from '../lib/local-files';
-import {enqueuePamark,flushPamark,syncJobs} from '../lib/pamark-sync';
+import {enqueuePamark,flushPamark,syncJobs,forcePendingJobs} from '../lib/pamark-sync';
 import {newDraft} from '../lib/capture';
 import {fillWorkbook} from '../lib/workbook-export';
 Object.assign(globalThis,{DOMParser,XMLSerializer,window:{dispatchEvent:()=>true,google:{accounts:{oauth2:{initTokenClient:(config:{callback:(r:unknown)=>void})=>({requestAccessToken:()=>config.callback({access_token:'test-only-token',expires_in:3600})})}}}}});
@@ -71,10 +71,27 @@ let writes=0;
 globalThis.fetch=async(input,options)=>{
  const url=new URL(String(input));
  if(url.pathname==='/drive/v2/files')return Response.json({items:[file()]});
- if(url.pathname==='/drive/v2/files/file-123')return new Response(remote);
- writes++;throw new Error('Must not write a conflicting shared row');
+if(url.pathname==='/drive/v2/files/file-123')return url.searchParams.get('alt')==='media'?new Response(remote):Response.json({id:'file-123',etag:`version-${version}`,version:String(version)});
+  writes++;throw new Error('Must not write a conflicting shared row');
 };
 await enqueuePamark(changed,'Testi');await assert.rejects(flushPamark(),/erilainen kirjaus/);assert.equal(writes,0);
+// Hyväksytty korvaus omalle riville (sama auto ja päivä) työntää sen jaetulle riville.
+let forceWrites=0,totalSends=0;
+globalThis.fetch=async(input,options)=>{
+ const url=new URL(String(input));
+ if(url.pathname==='/drive/v2/files')return Response.json({items:[file()]});
+ if(url.pathname==='/drive/v2/files/file-123')return url.searchParams.get('alt')==='media'?new Response(remote):Response.json({id:'file-123',etag:`version-${version}`,version:String(version)});
+ if(url.pathname==='/upload/drive/v2/files/file-123'){
+  totalSends++;if(!options?.body)throw new Error('upload ilman sisältöä');
+  remote=new Uint8Array(options.body as Uint8Array);forceWrites++;return Response.json(file());
+ }
+ throw new Error('Unexpected endpoint '+url.pathname);
+};
+await forcePendingJobs(changed.values.date,changed.values.vehicle);
+assert.equal(await flushPamark(),1,'vahvistettu korvaus lähettää työn');
+assert.equal(forceWrites,1,'jaetun tiedoston rivi korvattiin');
+assert.equal((await syncJobs())[changed.id].status,'synced');
+assert.doesNotThrow(()=>fillWorkbook(remote,'pamark',changed,'Testi',{fresh:false}));
 await putStored('drive:jobs',{});
 // A missing period is created directly in Drive, with no application server.
 const {createDriveWorkbook}=await import('../lib/google-drive');
@@ -118,7 +135,7 @@ globalThis.fetch=async(input)=>{
   const url=new URL(String(input));
   if(url.pathname.startsWith('/upload/')){checkWrites++;throw new Error('The connection check must not write');}
   if(url.pathname==='/drive/v2/files')return Response.json({items:[file()]});
-  if(url.pathname==='/drive/v2/files/file-123')return new Response(remote);
+if(url.pathname==='/drive/v2/files/file-123')return url.searchParams.get('alt')==='media'?new Response(remote):Response.json({id:'file-123',etag:`version-${version}`,version:String(version)});
   throw new Error('Unexpected endpoint '+url.pathname);
 };
 const found=await checkSharedList('test-folder-123','2026-09-02','Testi');
