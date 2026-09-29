@@ -16,7 +16,7 @@ import {saveVehicle} from '@/lib/vehicle-settings';
 
 import {loadTemplate,type ListTemplate} from '@/lib/templates';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/ui/dialog';
-import {prepareGoogle,connectGoogle,connected,savedDriveFolder} from '@/lib/google-drive';
+import {prepareGoogle,connectGoogle,connected,savedDriveFolder,savedHoursDriveFolder} from '@/lib/google-drive';
 import {enqueuePamark,flushPamark,checkSharedList,forcePendingJobs} from '@/lib/pamark-sync';
 import {sendHoursWorkbook,HoursDriveConflict} from '@/lib/hours-drive';
 
@@ -156,21 +156,23 @@ export default function LocalSave({kind,draft,name,onNew}:{kind:ListKind;draft:D
 
   async function download(){try{const file=await storedWorkbook(kind,draft.values.date,name);if(file)downloadWorkbook(file.filename,file.bytes);}catch{setError('Tiedoston vienti epäonnistui.');}}
 
-  // Lähettää valmiin tuntilistan sellaisenaan valittuun jaettuun Drive-kansioon.
-  // Tuntilista on kuljettajan oma tiedosto, joten mitään ei sulauteta. Samanniminen
-  // erilainen tiedosto estetään, kunnes käyttäjä nimenomaisesti valitsee korvaamisen.
+  // Lähettää valmiin tuntilistan omaan, erilliseen Drive-kansioon. Tuntilista on
+  // kuljettajan henkilökohtainen eikä se saa päätyä Pamarkin jaettuun ajolista-kansioon
+  // muiden työntekijöiden nähtäväksi, joten se vaatii oman kansion eikä putoa koskaan
+  // jaetun kansion varaan. Samanniminen erilainen tiedosto estetään, kunnes käyttäjä
+  // nimenomaisesti valitsee korvaamisen.
   async function sendHoursDrive(overwrite=false){
    if(kind!=='hours')return;setHoursDriveBusy(true);setHoursDriveError('');setHoursDriveMessage('');setHoursDriveOverwrite(false);
    try{
     if(!connected()){await prepareGoogle();await connectGoogle();}
-    const folder=await savedDriveFolder();
-    if(!folder)throw new Error('Valitse jaettu Drive-kansio kohdasta Asetukset.');
+    const folder=await savedHoursDriveFolder();
+    if(!folder)throw new Error('Valitse tuntilistan oma Drive-kansio kohdasta Asetukset.');
     const filename=workbookName(kind,draft.values.date,name);
     const file=await storedWorkbook(kind,draft.values.date,name);
     if(!file?.bytes)throw new Error('Tallenna tuntilista ensin Tallenna puhelimeen -painikkeella.');
     const outcome=await sendHoursWorkbook(folder.id,filename,file.bytes,overwrite);
     setHoursDriveOverwrite(false);
-    setHoursDriveMessage(outcome==='unchanged'?`Tuntilista on jo Drivessä (${folder.name}): ${filename}. Mitään ei muutettu.`:outcome==='created'?`Tuntilista lähetetty jaettuun kansioon (${folder.name}): ${filename}.`:`Tuntilista korvattiin Drivessä (${folder.name}): ${filename}.`);
+    setHoursDriveMessage(outcome==='unchanged'?`Tuntilista on jo Drivessä (${folder.name}): ${filename}. Mitään ei muutettu.`:outcome==='created'?`Tuntilista lähetetty omaan Drive-kansioon (${folder.name}): ${filename}.`:`Tuntilista korvattiin Drivessä (${folder.name}): ${filename}.`);
    }catch(e){
     if(e instanceof HoursDriveConflict){setHoursDriveOverwrite(true);setHoursDriveError('Kansiossa on jo erilainen versio tästä tuntilistasta. Lähetä vain jos haluat korvata sen.');return;}
     setHoursDriveError(e instanceof Error?e.message:'Lähetys Driveen epäonnistui. Tuntilista säilyy puhelimella.');

@@ -85,14 +85,23 @@ await page.getByRole('button',{name:'Tallenna puhelimeen'}).click();
 await page.getByText('Tuntilista on tallessa tällä laitteella.',{exact:true}).waitFor();
 assert.equal(lists,0,'mitään ei lähetetty ennen napin painallusta');
 
-// 1) Ei tiedostoa kansiossa: nappi luo tuntilistan jaettavaan kansioon.
+// 1) Ennen oman kansion valintaa lähetys kielletään: tuntilista ei saa mennä
+//    koskaan Pamarkin jaettuun kansioon, vaikka se olisi asetettu asetuksiin.
 await page.getByRole('button',{name:'Lähetä Driveen'}).click();
-await page.getByText('Tuntilista lähetetty jaettuun kansioon',{exact:false}).waitFor({timeout:120000});
+await page.getByText('Valitse tuntilistan oma Drive-kansio kohdasta Asetukset.',{exact:true}).waitFor({timeout:120000});
+assert.equal(lists,0,'jaettuun ajolista-kansioon ei lähetetty mitään');
+
+// Tuntilistalle valitaan oma henkilökohtainen kansio, eikä se ole jaettu kansio.
+await page.evaluate(async()=>{const {putStored}=await import('/lib/local-files.ts');await putStored('drive:hours-folder',{id:'oma-kansio',name:'Tuntilistat'});});
+
+// 2) Ei tiedostoa kansiossa: nappi luo tuntilistan omaan kansioon.
+await page.getByRole('button',{name:'Lähetä Driveen'}).click();
+await page.getByText('Tuntilista lähetetty omaan Drive-kansioon',{exact:false}).waitFor({timeout:120000});
 assert.equal(creates,1,'tiedosto luotiin');assert.equal(uploads,0,'ei viedä vaan luodaan');
 assert.ok(remote&&remote.length>5000,'kansioon ilmestyi oikean sisältöinen tiedosto');
 const workbookLength=remote.length;
 
-// 2) Samanniminen erilainen tiedosto: ei korvata ennen nimenomaista valintaa.
+// 3) Samanniminen erilainen tiedosto: ei korvata ennen nimenomaista valintaa.
 remote=new Uint8Array([0x09,0x09,0x09,0x09]);
 await page.getByRole('button',{name:'Lähetä Driveen'}).click();
 await page.getByText('Kansiossa on jo erilainen versio tästä tuntilistasta.',{exact:false}).waitFor({timeout:120000});
@@ -101,23 +110,23 @@ await page.getByRole('button',{name:'Lähetä silti ja korvaa kansion version'})
 await page.getByText('Tuntilista korvattiin Drivessä',{exact:false}).waitFor({timeout:120000});
 assert.equal(uploads,1,'korvaava lähetys tehtiin');assert.equal(remote.length,workbookLength,'kansion versio on nyt oma sisältö');
 
-// 3) Sama sisältö jo Drivessä: mitään ei lähetetä uudelleen.
+// 4) Sama sisältö jo Drivessä: mitään ei lähetetä uudelleen.
 await page.getByRole('button',{name:'Lähetä Driveen'}).click();
 await page.getByText('Tuntilista on jo Drivessä',{exact:false}).waitFor({timeout:120000});
 assert.equal(uploads,1,'samaa sisältöä ei lähetetä toisen kerran');
 
-// 4) Jaa: jakovalikko saa liitteenä oikean tiedoston.
+// 5) Jaa: jakovalikko saa liitteenä oikean tiedoston.
 await page.getByRole('button',{name:'Jaa',exact:true}).click();
 await page.waitForFunction(()=>window.__shares&&window.__shares.length===1,{timeout:15000});
 assert.deepEqual(await page.evaluate(()=>window.__shares[0].files),[filename],'jakovalikko sai tuntilistan liitteeksi');
 
-// 5) Jaa ilman jakovalikkoa: tiedosto ladataan Tiedostot-kansioon.
+// 6) Jaa ilman jakovalikkoa: tiedosto ladataan Tiedostot-kansioon.
 await page.evaluate(()=>{Object.defineProperty(navigator,'canShare',{value:()=>false,configurable:true});});
 const download=page.waitForEvent('download');
 await page.getByRole('button',{name:'Jaa',exact:true}).click();
 assert.equal((await download).suggestedFilename(),filename,'varavalinta latasi tuntilistan');
 
-// 6) Jakovalikko hylkää xlsx:n: Chrome antaa canShare:n ymmärtää tuen olevan olemassa,
+// 7) Jakovalikko hylkää xlsx:n: Chrome antaa canShare:n ymmärtää tuen olevan olemassa,
 //    mutta share hylkää NotAllowedError: 'Permission denied'. Silloin ladataan
 //    Tiedostot-kansioon ja näytetään selkokielinen viesti, ei raakaa virhettä.
 await page.evaluate(()=>{Object.defineProperty(navigator,'canShare',{value:()=>true,configurable:true});window.__shareReject=true;});
@@ -130,4 +139,4 @@ assert.equal(await page.getByText('Permission denied',{exact:false}).count(),0,'
 assert.deepEqual(errors,[]);
 await page.screenshot({path:'work/ui-hours-drive.png',fullPage:true});
 await browser.close();
-console.log('PASS browser: tuntilista lähtee Driveen (luonti/korvaus/jarjestys) ja Jaa (jakovalikko + latausvaravalinnat + xlsx-kielto)');
+console.log('PASS browser: tuntilista ei mene koskaan jaettuun kansioon, vaan omaan oma-kansio-valintaan (luonti/korvaus/jarjestys) ja Jaa (jakovalikko + latausvaravalinnat + xlsx-kielto)');

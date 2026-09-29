@@ -59,12 +59,16 @@ export async function readDriveFolder(value:string){
  if(!connected())throw new Error('Yhdistä Google-tili ensin.');
  const response=await driveRequest(`/drive/v2/files/${encodeURIComponent(parseDriveFolderId(value))}?fields=id,title,mimeType,capabilities(canAddChildren)&supportsAllDrives=true&includeItemsFromAllDrives=true`,{},'kansio');
  const data=await response.json() as {id:string;title?:string;mimeType?:string;capabilities?:{canAddChildren?:boolean}};
- if(data.mimeType!=='application/vnd.google-apps.folder')throw new Error('Antamasi linkki ei ole kansio. Valitse kansio, jossa ajolista sijaitsee.');
+ if(data.mimeType!=='application/vnd.google-apps.folder')throw new Error('Antamasi linkki ei ole kansio. Valitse kansio, johon tiedosto tallennetaan.');
  if(data.capabilities?.canAddChildren===false)throw new Error('Sinulla ei ole oikeutta lisätä tiedostoja tähän kansioon.');
  return {id:data.id,name:data.title||'Jaettu kansio'};
 }
 export function savedDriveFolder(){return getStored<DriveFolder>('drive:folder');}
 export async function setDriveFolder(folder:DriveFolder){await putStored('drive:folder',folder);window.dispatchEvent(new Event('drive-connection-changed'));}
+// Tuntilistalle on oma kansio, ettei henkilökohtainen tunti-tiedosto mene koskaan
+// automaattisesti samaan jaettuun kansioon kuin Pamarkin ajolista muiden nähtäväksi.
+export function savedHoursDriveFolder(){return getStored<DriveFolder>('drive:hours-folder');}
+export async function setHoursDriveFolder(folder:DriveFolder){await putStored('drive:hours-folder',folder);window.dispatchEvent(new Event('drive-connection-changed'));}
 export class DriveConflict extends Error {
  etag?:string;
  constructor(phase='tallennus',etag?:string){super(`Jaettu ajolista muuttui samaan aikaan (${phase}). Yritä synkronointia uudelleen.`);this.name='DriveConflict';this.etag=etag;}
