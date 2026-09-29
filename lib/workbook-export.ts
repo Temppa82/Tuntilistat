@@ -109,7 +109,7 @@ export function fillWorkbook(bytes: Uint8Array, kind: ListKind, draft: Draft, na
     if(v.sick==='1'&&![v.start,v.end,v.startKm,v.endKm].some(Boolean)) {
       patch=Object.fromEntries(['B','C','D','E','G','H'].map(c=>[`${c}${row}`,null]));
       Object.assign(patch,{[`A${row}`]:(Date.parse(v.date+'T00:00:00Z')-Date.UTC(1899,11,30))/86400000,[`I${row}`]:Number(v.allowance),[`J${row}`]:Number(v.foreignAllowance),[`K${row}`]:1,[`A${row+1}`]:`Reitti: ${[normalizeVehicle(v.vehicle),v.route||'Sairas'].filter(Boolean).join(' | ')}`});
-    }else patch = hoursEntryCells(row, {vehicle:normalizeVehicle(v.vehicle),date:v.date,start:v.start,end:v.end,startKm:parseNumber(v.startKm),endKm:parseNumber(v.endKm),waiting:parseNumber(v.waiting),breakMinutes:parseNumber(v.breakMinutes),allowance:v.allowance==='1',foreignAllowance:v.foreignAllowance==='1',sick:v.sick==='1',route:v.route,overnight:draft.overnight});
+    }else patch = hoursEntryCells(row, {vehicle:normalizeVehicle(v.vehicle),date:v.date,start:v.start,end:v.end,startKm:parseNumber(v.startKm),endKm:parseNumber(v.endKm),waiting:parseNumber(v.waiting)||0,breakMinutes:parseNumber(v.breakMinutes)||0,allowance:v.allowance==='1',foreignAllowance:v.foreignAllowance==='1',sick:v.sick==='1',route:v.route,overnight:draft.overnight});
   } else {
     const rows = pamarkHeaders(s).flatMap(h=>pamarkDayRows(h));
     checkPeriod(s, rows, kind, v.date);
