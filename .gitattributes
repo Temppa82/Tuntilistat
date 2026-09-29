@@ -1,8 +1,8 @@
-﻿# Koodi tallennetaan aina LF-muodossa. Windows muuntaa muuten rivinvaihdot CRLF:ksi
-# kopioinnin yhteydessÃ¤, ja koodaus- sekÃ¤ XML-tarkistukset kaatuvat sen vuoksi.
+# Koodi tallennetaan aina LF-muodossa. Windows muuntaa muuten rivinvaihdot CRLF:ksi
+# kopioinnin yhteydessä, ja koodaus- sekä XML-tarkistukset kaatuvat sen vuoksi.
 * text=auto eol=lf
 
-# NÃ¤mÃ¤ ovat oikein binÃ¤Ã¤risiÃ¤, eivÃ¤t tekstiÃ¤.
+# Nämä ovat oikein binäärisiä, eivät tekstiä.
 *.png binary
 *.xlsx binary
 *.zip binary
