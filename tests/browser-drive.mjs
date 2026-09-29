@@ -103,6 +103,56 @@ assert.deepEqual(formulas(after),formulas(beforeSnap),'kaavat säilyivät lähet
 // Oma kopio päivittyi jaetun tiedoston sisältöön.
 const local=await page.evaluate(async()=>{const {getStored}=await import('/lib/local-files.ts');return await getStored('workbook:Pamark ajolista syyskuu 1-2 2026.xlsx');});
 assert.equal(local.bytes.length,remote.length,'paikallinen kopio on yhdistetty tiedosto');
+
+// Regressio: korvauspitä kohdistua siihen jonotettuun kirjaukseen, jonka ristiriita
+// dialogissa näkyy, eikä auki olevaan luonnokseen. Auki oleva päivä on uusi (06.09),
+// mutta vanhempi jonotettu kirjaus (03.09) on ristiriidassa jaetun tiedoston kanssa:
+// dialogin painike korvaa 03.09:n, ja kumpikin kirjaus lähtee.
+const snap38=new XlsxDocument(remote).snapshot();
+await page.evaluate(async()=>{
+  const {newDraft,initialState,steps}=await import('/lib/capture.ts');
+  const {putStored}=await import('/lib/local-files.ts');
+  const {writeLocal}=await import('/lib/local-capture.ts');
+  const {enqueuePamark}=await import('/lib/pamark-sync.ts');
+  await putStored('drive:jobs',{});
+  const clash=newDraft();
+  Object.assign(clash.values,{vehicle:'JTS-790',date:'2026-09-03',start:'06:00',end:'16:30',startKm:'350000',endKm:'350100',loadingHours:'1',stops:'23',route:'vantaa-espoo-helsinki-vantaa-tuusula-jokela-järvenpää'});
+  await enqueuePamark(clash,'Testi Testiajo');
+  const s=initialState();s.name='Testi Testiajo';s.nameLocked=true;s.active='pamark';
+  s.drafts.pamark.values.date='2026-09-06';s.drafts.pamark.values.vehicle='JTS-790';
+  s.drafts.pamark.values.start='06:00';s.drafts.pamark.values.end='15:30';
+  s.drafts.pamark.values.startKm='1500';s.drafts.pamark.values.endKm='1700';
+  s.drafts.pamark.values.loadingHours='0,5';s.drafts.pamark.values.stops='12';s.drafts.pamark.values.route='Toinen selaintestin reitti';
+  s.drafts.pamark.step=steps.pamark.length;
+  await writeLocal(s);
+});
+await page.reload();
+await page.getByText('Toinen selaintestin reitti',{exact:false}).first().waitFor();
+const uploadsBefore=uploads;
+await save.click();
+await page.getByText('Päivä odottaa Driveen lähettämistä.',{exact:false}).waitFor();
+await sync.click();
+const dialog=page.getByRole('dialog');
+await dialog.getByText('Jaetussa ajolistassa on jo tämä kirjaus',{exact:true}).waitFor();
+// Dialogi kertoo, että kohde on juuri se ristiriitainen kirjaus (03.09) eikä auki oleva 06.09.
+await dialog.getByText('JTS-790 2026-09-03',{exact:false}).waitFor();
+await dialog.getByRole('button',{name:'Korvaa jaetun tiedoston rivi omilla arvoilla'}).click();
+await page.getByText('2 kirjausta lähetettiin jaettuun ajolistaan.',{exact:false}).waitFor({timeout:120000});
+await page.getByText('sisältää nyt 38 päivää',{exact:false}).waitFor({timeout:120000});
+assert.equal(uploads,uploadsBefore+2,'ristiriitainen kirjaus ja uusi päivä lähetetään');
+assert.equal(await dialog.count(),0,'korvauksen jälkeen dialogi sulkeutuu eikä aukea uudelleen');
+const afterForce=new XlsxDocument(remote).snapshot();
+assert.equal(pamarkDayList(remote).length,38);
+const overwritten=pamarkDayList(remote).find(d=>d.date==='2026-09-03'&&d.label==='JTS-790');
+assert.ok(overwritten,'korvattu päivä on rivillä');
+assert.equal(afterForce[`E${overwritten.row}`]?.value,350100,'jaetun tiedoston rivi sai omat kilometrilukemat');
+const formulas38=(s)=>Object.fromEntries(Object.entries(s).filter(([,c])=>c.formula).map(([a,c])=>[a,c.formula]));
+assert.deepEqual(formulas38(afterForce),formulas38(snap38),'kaavat säilyivät korvauksessa');
+for(const day of pamarkDayList(new Uint8Array(remote))){
+ if(day.label!=='JTS-790'||day.date==='2026-09-03'||day.date==='2026-09-06')continue;
+ const beforeCell=snap38[`E${day.row}`]?.value,afterCell=afterForce[`E${day.row}`]?.value;
+ assert.equal(afterCell,beforeCell,`toisen päivän ${day.date} kilometrilukema säilyi`);
+}
 assert.deepEqual(errors,[]);
 await page.screenshot({path:'work/ui-drive-sync.png',fullPage:true});
 await browser.close();

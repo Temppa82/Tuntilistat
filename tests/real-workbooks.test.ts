@@ -7,7 +7,7 @@ import {XlsxDocument} from '../lib/xlsx-document';
 import {findPamarkTarget,pamarkFingerprint} from '../lib/pamark-target';
 import {existingPamarkDay} from '../lib/open-pamark';
 import {existingHoursDay,hoursDays} from '../lib/read-hours';
-import {fillWorkbook,emptyWorkbook,workbookName} from '../lib/workbook-export';
+import {fillWorkbook,emptyWorkbook,workbookName,EntryConflict} from '../lib/workbook-export';
 import {mergePamarkJob,type SyncJob} from '../lib/pamark-sync';
 import {importHours} from '../lib/import-hours';
 import {getStored,type SavedWorkbook} from '../lib/local-files';
@@ -21,6 +21,12 @@ const original=existingPamarkDay(pamark,d)!;assert.equal(original.values.start,'
 const fresh=newDraft();Object.assign(fresh.values,{vehicle:'ZLC-613',date:'2026-09-14',start:'06:00',end:'15:00',startKm:'1000',endKm:'1200',loadingHours:'0.5',stops:'12',route:'TESTI'});
 assert.equal(findPamarkTarget(before,'ZLC-613',fresh.values.date).row,101);
 let filled=fillWorkbook(pamark,'pamark',fresh,'Testi',{fresh:false});assert.equal(existingPamarkDay(filled.bytes,fresh)!.values.route,'TESTI');
+// Sama päivä uudelleen ilman korvaamista on sama kirjaus, vaikka yrityksen tiedosto
+// olisi ehtinyt kirjoittaa kellonajat tekstinä. Tekstimuoto 16:30 ja luku 0.6875 ovat sama arvo.
+assert.doesNotThrow(()=>fillWorkbook(filled.bytes,'pamark',fresh,'Testi',{shared:true,fresh:false}),'identtinen uudelleentallennus ei riitele');
+const asText=new XlsxDocument(filled.bytes);asText.set('B101','06:00');asText.set('C101','15:00');
+assert.doesNotThrow(()=>fillWorkbook(asText.bytes(),'pamark',fresh,'Testi',{shared:true,fresh:false}),'tekstimuotoinen kellonaika ei eroa omasta luvusta');
+const routeChanged=structuredClone(fresh);routeChanged.values.route='Eri reitti';assert.throws(()=>fillWorkbook(asText.bytes(),'pamark',routeChanged,'Testi',{shared:true,fresh:false}),EntryConflict,'oikea eroavaisuus riitelee edelleen');
 const after=new XlsxDocument(filled.bytes).snapshot();for(const [a,c] of Object.entries(before)){if(c.formula)assert.equal(after[a].formula,c.formula);if(!c.formula&&/^([A-Z]+)([1-9]|[1-9][0-9])$/.test(a)&&a!=='A98')assert.deepEqual(after[a],c);}
 const edit=structuredClone(original);edit.values.route='Korjaus';
 const job:SyncJob={id:edit.id,draft:edit,name:'Testi',filename:workbookName('pamark',edit.values.date,'Testi'),status:'pending',updatedAt:''};

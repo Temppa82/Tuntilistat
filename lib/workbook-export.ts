@@ -4,6 +4,19 @@ import { pamarkTemplate, pamarkDayRows, pamarkEntryColumns, pamarkEntryCells } f
 import { hoursTemplate, hoursEntryCells } from './hours-template';
 import { months, normalizeVehicle, parseNumber, validateDraft, validDate, type Draft, type ListKind } from './capture';
 
+// Pamarkin tiedosto kirjoittaa kellonajat ja kestot toisinaan tekstinä ("16:30", "01:00").
+// Ne vastaavat tarkalleen niitä päivän murto-osia, joina sovellus itse tallentaa. Muuten
+// samanarvoinen, tekstimuotoisen rivin päälle tehty uudelleentallennus näyttäisi aina
+// erilaiselta kirjaukselta eikä koskaan löytäisi riviä valmiiksi.
+function sameCellValue(value: string | number | null | undefined, old: string | number | null | undefined) {
+  if (value === old) return true;
+  if (typeof value === 'number' && typeof old === 'number') return Math.abs(value - old) <= 1e-9;
+  const asTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s) ? (Number(s.slice(0, 2)) * 60 + Number(s.slice(3))) / 1440 : NaN;
+  if (typeof old === 'string' && typeof value === 'number') { const t = asTime(old); return Number.isFinite(t) && Math.abs(t - value) <= 1e-9; }
+  if (typeof value === 'string' && typeof old === 'number') { const t = asTime(value); return Number.isFinite(t) && Math.abs(t - old) <= 1e-9; }
+  return false;
+}
+
 export type EntryCellDiff = { col: string; old: string | number | null | undefined; new: string | number | null | undefined };
 export class EntryConflict extends Error {
   diffs: EntryCellDiff[] = [];
@@ -118,7 +131,7 @@ export function fillWorkbook(bytes: Uint8Array, kind: ListKind, draft: Draft, na
   if (existing && !options.overwrite && Object.entries(patch).some(([a,value])=> {
     const old=s[a]?.value;
     if (a===`A${row}`) return sheetDate(old)!==v.date;
-    return typeof value==='number' && typeof old==='number' ? Math.abs(value-old)>1e-9 : old!==value;
+    return !sameCellValue(value,old);
   })) {
     const diffs: EntryCellDiff[] = Object.entries(patch).map(([addr,value])=>({
       col:addr,

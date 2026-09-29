@@ -6,7 +6,7 @@ import {connectGoogle,setDriveFolder,findDriveWorkbook,uploadDriveWorkbook,Drive
 import {putStored,getStored} from '../lib/local-files';
 import {enqueuePamark,flushPamark,syncJobs,forcePendingJobs} from '../lib/pamark-sync';
 import {newDraft} from '../lib/capture';
-import {fillWorkbook} from '../lib/workbook-export';
+import {fillWorkbook,EntryConflict} from '../lib/workbook-export';
 Object.assign(globalThis,{DOMParser,XMLSerializer,window:{dispatchEvent:()=>true,google:{accounts:{oauth2:{initTokenClient:(config:{callback:(r:unknown)=>void})=>({requestAccessToken:()=>config.callback({access_token:'test-only-token',expires_in:3600})})}}}}});
 Object.assign(globalThis,{localStorage:{getItem:()=>null,setItem:()=>{}}});
 await connectGoogle();
@@ -92,6 +92,30 @@ assert.equal(await flushPamark(),1,'vahvistettu korvaus lähettää työn');
 assert.equal(forceWrites,1,'jaetun tiedoston rivi korvattiin');
 assert.equal((await syncJobs())[changed.id].status,'synced');
 assert.doesNotThrow(()=>fillWorkbook(remote,'pamark',changed,'Testi',{fresh:false}));
+await putStored('drive:jobs',{});
+// Ristiriitaan joutunut kirjaus kulkee virheen mukana. Korvausdialogi voi silloin
+// pakottaa juuri sen, eikä auki olevan luonnoksen päivää, joka on toinen kirjaus.
+const exclA=structuredClone(draft);exclA.id='excl-a';exclA.values.date='2026-09-01';exclA.values.endKm='7777';
+const exclB=structuredClone(draft);exclB.id='excl-b';exclB.values.date='2026-09-02';exclB.values.endKm='8888';
+await enqueuePamark(exclA,'Testi');await enqueuePamark(exclB,'Testi');
+let ownDriveWrites=0;
+globalThis.fetch=async(input,options)=>{
+ const url=new URL(String(input));
+ if(url.pathname==='/drive/v2/files')return Response.json({items:[file()]});
+ if(url.pathname==='/drive/v2/files/file-123')return url.searchParams.get('alt')==='media'?new Response(remote):Response.json({id:'file-123',etag:`version-${version}`,version:String(version)});
+ if(url.pathname==='/upload/drive/v2/files/file-123'){ownDriveWrites++;remote=new Uint8Array(options?.body as Uint8Array);return Response.json(file());}
+ throw new Error('Unexpected endpoint '+url.pathname);
+};
+const conflicts=[];
+for(let i=0;i<3;i++){try{await flushPamark();break;}catch(e){if(!(e instanceof EntryConflict))throw e;conflicts.push((e as {job?:{id:string,values:{date:string,vehicle:string}}}).job?.id);if(i===0)assert.equal(conflicts[0],'excl-a','ensimmäinen ristiriita kertoo, mikä kirjaus odottaa');}}
+assert.deepEqual(conflicts,['excl-a','excl-a','excl-a'],'väärän kirjauksen pakottaminen ei auta ensimmäistä');
+assert.equal(ownDriveWrites,0,'ristiriitaa ei kirjoiteta päälle ennen korvaamista');
+await forcePendingJobs(exclB.values.date,exclB.values.vehicle);
+try{await flushPamark();assert.fail('pakottamalla auki olevan luonnoksen päivää ei pitäisi päästä ohi vanhan ristiriidan');}catch(e){assert.ok(e instanceof EntryConflict,'väärä korvaus ei vie ensimmäisestä ristiriidasta ohi');assert.equal((e as {job?:{id:string}}).job?.id,'excl-a');}
+await forcePendingJobs(exclA.values.date,exclA.values.vehicle);
+assert.equal(await flushPamark(),2,'oikean kirjauksen pakotuksen jälkeen kumpikin vahvistettu kirjaus lähtee');
+assert.equal(ownDriveWrites,2);
+assert.equal((await syncJobs())['excl-a'].status,'synced');assert.equal((await syncJobs())['excl-b'].status,'synced');
 await putStored('drive:jobs',{});
 // A missing period is created directly in Drive, with no application server.
 const {createDriveWorkbook}=await import('../lib/google-drive');

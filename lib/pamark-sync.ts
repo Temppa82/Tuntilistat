@@ -6,6 +6,9 @@ import {fillWorkbook,workbookName,EntryConflict,emptyWorkbook} from './workbook-
 import {connected,savedDriveFolder,findDriveWorkbook,downloadDriveWorkbook,uploadDriveWorkbook,createDriveWorkbook,DriveConflict} from './google-drive';
 import {pamarkDayList} from './read-pamark';
 export type SyncJob={id:string;draft:Draft;name:string;folderId?:string;filename:string;status:'pending'|'synced'|'error';message?:string;updatedAt:string;confirmedBase?:string;force?:boolean};
+// Korvausdialogin on pakotettava juuri se jonotettu kirjaus, joka meni ristiriitaan —
+// ei sitä päivää, joka sattuu olemaan auki. Siksi virheen mukana kulkee työ.
+export type JobConflict=EntryConflict&{job?:SyncJob};
 import {XlsxDocument} from './xlsx-document';
 import {pamarkFingerprint} from './pamark-target';
 import {verifySharedMerge} from './shared-verify';
@@ -125,9 +128,9 @@ export function flushPamark(){return syncing??=flush().finally(()=>{syncing=unde
       refused=e.etag||'';
      }
    }
-    sent++;
+sent++;
     await saveJob({...job,status:'synced',message:'Tallennettu ja tarkistettu Drivessä.'},job.updatedAt);
-   }catch(e){const message=e instanceof Error?e.message:'Synkronointi epäonnistui.';await saveJob({...job,status:'error',message},job.updatedAt);if(e instanceof Error)throw e;throw new Error(message);}
+    }catch(e){const message=e instanceof Error?e.message:'Synkronointi epäonnistui.';await saveJob({...job,status:'error',message},job.updatedAt);if(e instanceof EntryConflict)(e as JobConflict).job=job;if(e instanceof Error)throw e;throw new Error(message);}
   }
   // Nappi kertoo kappaleen, joten lähetetty määrä palautuu sille tiedoston tilan lukemiseen jälkeen.
   return sent;
