@@ -44,7 +44,10 @@ assert.ok(setup.days.includes(setup.date),'poistettava päivä ei ole listalla')
 
 // --- Tuntilistan päivän poisto listanäkymästä ---
 await page.reload();
+const openDays=()=>page.locator('.day-overview summary').click();
 const rows=page.locator('.day-list li');
+// Päivälista ja ajoneuvolohkot ovat oletuksena kiinni, jotta ruutu ei täyty päivistä.
+await openDays();
 await rows.first().waitFor();
 assert.equal(await rows.count(),setup.count,'päivärivien määrä ei täsmää luettuun listaan');
 // Poista on nyt myös tuntilistassa, ei vain ajolistassa.
@@ -182,6 +185,7 @@ assert.deepEqual(kept,{formulas:setup.formulas,cells:setup.cells},'hylkäys muut
 
 // --- Tallennetun päivän hylkäys poistaa sen myös tiedostosta ---
 const target=setup.days.find(d=>d!==setup.date);
+await openDays();
 await page.locator('.day-list li',{hasText:fi(target)}).locator('button').first().click();
 await page.getByText('Tarkista kirjaukset').waitFor();
 await page.locator('.capture-undo button.discard').click();

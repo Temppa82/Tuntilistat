@@ -19,6 +19,8 @@ await page.getByRole('button',{name:'Tunnit Henkilökohtainen tuntilista'}).clic
 await page.locator('input[type=date]').first().fill('2025-03-05');
 const summary=page.locator('.day-overview summary');
 await summary.waitFor();
+// Päivälista on oletuksena suljettu, jotta kuvaruutu ei täyty päivistä.
+await summary.click();
 assert.match(await summary.innerText(),/\(4\)/,'valmiin tuntilistan päivät eivät näyttäneet listassa');
 assert.ok(!(await page.locator('.day-overview p.hint').first().innerText()).includes('tiedostoa ei ole vielä'),'valmis tuntilista näytti puuttuvan');
 assert.deepEqual((await page.locator('.day-list strong').allInnerTexts()).sort(),['3.3.2025','4.3.2025','5.3.2025','6.3.2025']);

@@ -31,6 +31,8 @@ const setup=await page.evaluate(async ({pamark})=>{
 assert.ok(setup.count>=2,'päivälehtiössä on oltava vähintään kaksi päivää');
 await page.reload();
 const rows=page.locator('.day-list li');
+// Päivälista on oletuksena kiinni ja aukeaa aktiivisen ajoneuvon kohdalta.
+await page.locator('.day-overview summary').click();
 await rows.first().waitFor();
 assert.equal(await rows.count(),setup.count,'päivärivien määrä ei täsmää luettuun listaan');
 

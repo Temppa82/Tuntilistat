@@ -40,7 +40,7 @@ import {validDate} from '@/lib/capture';
 import {dayKey,sameDayValues,hasDayValues} from '@/lib/day-drafts';
 import {snapshot,noteStep,sameSnapshot,undoStep,type DraftSnapshot,type HistoryEntry} from '@/lib/draft-history';
 import {discardSavedDay} from '@/lib/remove-day';
- const APP_VERSION='2.13.4';
+ const APP_VERSION='2.13.5';
 
 
 export default function CaptureApp(){
@@ -140,6 +140,7 @@ export default function CaptureApp(){
   reconciled.current=selected+'|'+next.id+'|'+JSON.stringify(fileDraft.values);
   lastImported.current=next===fileDraft?next:null;
   update({...latest,drafts:{...latest.drafts,[selected]:next}});setErrors({});setError('');
+   requestAnimationFrame(()=>document.querySelector('.question-panel')?.scrollIntoView({block:'start'}));
    setStatus((found?(cached&&!source?'Valitun päivän paikallinen luonnos avattu.':'Valitun päivän tiedot avattu tiedostosta.'):'Päivälle ei ole kirjauksia. Voit täyttää uuden päivän.')+('excluded' in file&&file.excluded?' Lähettämätön kirjauksesi ei sovi tiedoston tähän riviin, joten se jäi tallennusjonoon. Muokkaa päivää tiedoston version päälle ja tallenna uudelleen.':''));
  }
 
@@ -230,11 +231,7 @@ export default function CaptureApp(){
 
  <p className="draft-status" role="status"><Check size={16}/>{status}</p>{error&&<div className="error-box" role="alert">{error}<button className="secondary" onClick={()=>update(state)}>Yritä tallennusta uudelleen</button></div>}
 
-  {kind&&draft&&<DayBrowser key={kind} kind={kind} draft={draft} name={state.name} onOpen={openDay} onDeleted={forgetDay}/>}
-
-  {kind==='pamark'&&<section className="phone-panel" aria-label="Avattu ajolista"><h2>Pamarkin ajolista</h2>{opening?<p role="status">Avataan ajolistaa⬦</p>:<><p><strong>{opened?.filename}</strong></p><p role="status">{openError||opened?.message}</p><button className="secondary" onClick={()=>setRefresh(n=>n+1)}>Lue ajolista uudelleen</button></>}<p className="hint">Ajolista tallennetaan vain tälle laitteelle. Tuotu valmis ajolista säilyy täysin ennallaan, ja päivät voi lisätä siihen jälkeenpäin.</p></section>}
-
- {!kind?<section className="capture-start"><h1>Valitse lista ja aloita.</h1><p>Voit täyttää osan aamulla ja jatkaa illalla. Listojen välillä vaihtaminen säilyttää molemmat luonnokset.</p></section>:draft&&<section className="question-panel"><div className="question-progress"><span>{kind==='hours'?'Tunnit':'Pamark ajolista'}</span><span>{Math.min(draft.step+1,list.length)} / {list.length}</span></div><Progress value={Math.min((draft.step+1)/list.length*100,100)}/>
+  {!kind?<section className="capture-start"><h1>Valitse lista ja aloita.</h1><p>Voit täyttää osan aamulla ja jatkaa illalla. Listojen välillä vaihtaminen säilyttää molemmat luonnokset.</p></section>:draft&&<section className="question-panel"><div className="question-progress"><span>{kind==='hours'?'Tunnit':'Pamark ajolista'}</span><span>{Math.min(draft.step+1,list.length)} / {list.length}</span></div><Progress value={Math.min((draft.step+1)/list.length*100,100)}/>
 
  {step?<form onSubmit={e=>{e.preventDefault();move(draft.step+1,true);}} noValidate><h1 id="question-label">{step.label}</h1>{step.hint&&<p id="question-hint">{step.hint}</p>}
 
@@ -250,6 +247,13 @@ export default function CaptureApp(){
   <p className="hint capture-undo-hint" role="status">{notice||(()=>{const last=history[kind][history[kind].length-1];if(!last)return 'Kumoa palauttaa muutetun kysymyksen alkuperäisen arvon.';const field=list[last.step];return `Kumoa palauttaa vaiheen ${field?field.label.replace('?',''):'Tarkista'}.`;})()}</p>
 
   </section>}
+
+  {/* Päiväkirja ja tuotu lista ovat toissijaisia työkaluja: varsinainen täyttö
+      on yllä, joten puhelimella ei tarvitse selata tyhjää tilaa jokaisen
+      kysymyksen kohdalla. Päivä avattaessa vieritetään lomakkeen kohdalle. */}
+  {kind&&draft&&<DayBrowser key={kind} kind={kind} draft={draft} name={state.name} onOpen={openDay} onDeleted={forgetDay}/>}
+
+  {kind==='pamark'&&<details className="phone-panel" aria-label="Avattu ajolista"><summary>Pamarkin ajolista</summary>{opening?<p role="status">Avataan ajolistaa⬦</p>:<><p><strong>{opened?.filename}</strong></p><p role="status">{openError||opened?.message}</p><button className="secondary" onClick={()=>setRefresh(n=>n+1)}>Lue ajolista uudelleen</button></>}<p className="hint">Ajolista tallennetaan vain tälle laitteelle. Tuotu valmis ajolista säilyy täysin ennallaan, ja päivät voi lisätä siihen jälkeenpäin.</p></details>}
 
   <details className="phone-panel"><summary>Tallennetut listat</summary><SavedFiles/></details>
 
