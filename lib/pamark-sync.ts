@@ -1,4 +1,4 @@
-import {normalizeVehicle,type Draft} from './capture';
+import {normalizeVehicle,localDate,type Draft} from './capture';
 import {getStored,putStored,sharedDirectory,permit,readWorkbook,writeWorkbook,type SavedWorkbook} from './local-files';
 import {loadTemplate} from './templates';
 import {applyVehicles,fleet} from './vehicle-settings';
@@ -87,6 +87,25 @@ export async function checkSharedList(folderId:string,date:string,name:string):P
  const bytes=await downloadDriveWorkbook(file);
  const days=pamarkDayList(bytes);
  return {filename,exists:true,days:days.length,vehicles:[...new Set(days.map(d=>d.label))].sort(),size:bytes.length};
+}
+
+export type NextPamarkPeriod={date:string;filename:string};
+// Seuraava jakso nykyhetkestä: meneillään 1-15 → tuleva 16-30, meneillään 16-30 → tulevan
+// kuukauden 1-15. Näin nappi luo aina sen jakson, joka on juuri alkamassa.
+export function nextPeriodStart(today=localDate()){const [y,m,d]=today.split('-').map(Number);return d>15?(m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`):`${y}-${String(m).padStart(2,'0')}-16`;}
+export function nextPamarkPeriod(name:string,today=localDate()):NextPamarkPeriod{const date=nextPeriodStart(today);return {date,filename:workbookName('pamark',date,name)};}
+// Luodaan seuraavan jakson tyhjä ajolista jaettuun Drive-kansioon valmiiksi samalla
+// rakenteella, jonka sovellus muuten tekisi ensimmäisen synkronoidun päivän myötä.
+// Olemassa olevaa tiedostoa ei koskaan korvata.
+export async function prepareNextPeriodWorkbook(folderId:string,name:string):Promise<{created:boolean;filename:string}>{
+ if(!connected())throw new Error('Yhdistä Google-tili asetuksissa.');
+ const {date,filename}=nextPamarkPeriod(name);
+ if(await findDriveWorkbook(folderId,filename))return {created:false,filename};
+ const template=await loadTemplate('pamark');
+ const bytes=applyVehicles(emptyWorkbook(template.bytes,'pamark',date,name),await fleet(),true);
+ try{await createDriveWorkbook(folderId,filename,bytes);}
+ catch(e){if(await findDriveWorkbook(folderId,filename))return {created:false,filename};throw e;}
+ return {created:true,filename};
 }
 
 export function flushPamark(){return syncing??=flush().finally(()=>{syncing=undefined;});}
