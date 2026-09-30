@@ -1,4 +1,4 @@
-import { getStored, putStored } from './local-files';
+import { getStored, putStored, deleteStored } from './local-files';
 // Browser identifiers, not client secrets. Restrict the API key to this app and Google Picker in Cloud Console.
 export type GoogleConfig={clientId:string;pickerKey:string;projectNumber:string};
 export function googleConfig():GoogleConfig {try{return JSON.parse(localStorage.getItem('ajolista:google-config')||'null')||{clientId:'',pickerKey:'',projectNumber:''};}catch{return {clientId:'',pickerKey:'',projectNumber:''};}}
@@ -57,7 +57,7 @@ export function parseDriveFolderId(value:string){
 /** Varmistaa käsin liitetyn kansion oikeaksi kansioksi ja kirjoitettavaksi, lukien vain metatiedot. */
 export async function readDriveFolder(value:string){
  if(!connected())throw new Error('Yhdistä Google-tili ensin.');
- const response=await driveRequest(`/drive/v2/files/${encodeURIComponent(parseDriveFolderId(value))}?fields=id,title,mimeType,capabilities(canAddChildren)&supportsAllDrives=true&includeItemsFromAllDrives=true`,{},'kansio');
+ const response=await driveRequest(`/drive/v2/files/${encodeURIComponent(parseDriveFolderId(value))}?fields=id,title,mimeType,capabilities(canAddChildren)&supportsAllDrives=true`,{},'kansio');
  const data=await response.json() as {id:string;title?:string;mimeType?:string;capabilities?:{canAddChildren?:boolean}};
  if(data.mimeType!=='application/vnd.google-apps.folder')throw new Error('Antamasi linkki ei ole kansio. Valitse kansio, johon tiedosto tallennetaan.');
  if(data.capabilities?.canAddChildren===false)throw new Error('Sinulla ei ole oikeutta lisätä tiedostoja tähän kansioon.');
@@ -73,19 +73,44 @@ export class DriveConflict extends Error {
  etag?:string;
  constructor(phase='tallennus',etag?:string){super(`Jaettu ajolista muuttui samaan aikaan (${phase}). Yritä synkronointia uudelleen.`);this.name='DriveConflict';this.etag=etag;}
 }
+export class DriveApiError extends Error {
+ status:number;
+ path:string;
+ constructor(status:number,path:string,message:string){super(message);this.name='DriveApiError';this.status=status;this.path=path;}
+}
 export async function driveRequest(path:string,options:RequestInit={},phase='tallennus'){
  if(!connected())throw new Error('Google-yhteys on vanhentunut. Yhdistä Google uudelleen asetuksissa.');
  if(!/^\/(?:upload\/)?drive\/v[23]\//.test(path))throw new Error('Virheellinen Google-pyyntö.');
  const response=await fetch('https://www.googleapis.com'+path,{...options,headers:{...Object.fromEntries(new Headers(options.headers)),Authorization:`Bearer ${accessToken}`}});
  if(response.status===401){disconnect();throw new Error('Google-yhteys on vanhentunut. Yhdistä uudelleen asetuksissa.');}
  if(response.status===412)throw new DriveConflict(phase);
- if(!response.ok)throw new Error(response.status===403?'Google esti toiminnon. Tarkista kansion muokkausoikeus ja Drive API:n käyttöönotto.':`Drive-pyyntö epäonnistui (${response.status}). Paikalliset tiedot ovat tallessa.`);
+ if(!response.ok){
+  // Kehittäjälle käy ilmi, mikä pyyntö epäonnistui ja miksi; virheen mukana tuleva
+  // vastausviesti on Googlen oma syy (esim. "Invalid query").
+  let reason='';
+  try{reason=((await response.clone().json() as {error?:{message?:string}}).error?.message||'').trim();}catch{}
+  const endpoint=`${options.method||'GET'} ${path.split('?')[0]}`;
+  if(response.status===403)throw new DriveApiError(403,path,`Google esti toiminnon${reason?` (${reason})`:''}. Tarkista kansion muokkausoikeus ja Drive API:n käyttöönotto.`);
+  throw new DriveApiError(response.status,path,`Drive-pyyntö epäonnistui (${response.status}${reason?`: ${reason}`:''}). ${endpoint}. Paikalliset tiedot ovat tallessa.`);
+ }
  return response;
 }
 const quote=(s:string)=>s.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 export async function findDriveWorkbook(folderId:string,filename:string){
  const q=`'${quote(folderId)}' in parents and trashed = false and (title = '${quote(filename)}' or title = '${quote(filename.replace(/\.xlsx$/,''))}')`;
- const response=await driveRequest('/drive/v2/files?'+new URLSearchParams({q,fields:'items(id,title,mimeType,etag,version,parents(id),editable),nextPageToken',maxResults:'100',supportsAllDrives:'true',includeItemsFromAllDrives:'true'}));
+ const list=(allDrives:boolean)=>{
+  const params:Record<string,string>={q,fields:'items(id,title,mimeType,etag,version,parents(id),editable),nextPageToken',maxResults:'100',supportsAllDrives:'true'};
+  // Yhdelläkään tavallisella tuntilista-kansiolla all-Drives-signaalia ei tarvita;
+  // jos Google hylkää sen (400/403), haetaan kerran ilman sitä.
+  if(allDrives)params.includeItemsFromAllDrives='true';
+  return driveRequest('/drive/v2/files?'+new URLSearchParams(params));
+ };
+ let response:Response;
+ try{response=await list(true);}
+ catch(first){
+  if(!(first instanceof DriveApiError)||(first.status!==400&&first.status!==403))throw first;
+  response=await list(false);
+ }
  const data=await response.json() as {items:DriveFile[];nextPageToken?:string};
  if(data.items.length>1||data.nextPageToken)throw new Error('Kansiossa on useita samannimisiä ajolistoja. Tarkista tiedostot ennen synkronointia.');
  return data.items[0];
@@ -117,19 +142,37 @@ export async function uploadDriveWorkbook(file:DriveFile,bytes:Uint8Array){
   await driveRequest(`/upload/drive/v2/files/${encodeURIComponent(file.id)}?uploadType=media&supportsAllDrives=true`,{method:'PUT',headers:{'Content-Type':XLSX_MIME,'If-Match':etag},body:new Uint8Array(bytes)},'kirjoitus');
  }catch(e){if(e instanceof DriveConflict)e.etag=etag;throw e;}
 }
+async function preGeneratedId(){const response=await driveRequest('/drive/v3/files/generateIds?count=1&space=drive&type=files',{},'luonti');return (((await response.json()) as {ids?:string[]}).ids||[])[0]||'';}
+async function insertDriveWorkbook(folderId:string,filename:string,bytes:Uint8Array,id:string){
+ const metadata:Record<string,string|object>={title:filename,mimeType:XLSX_MIME,parents:[{id:folderId}]};
+ if(id)metadata.id=id;
+ const boundary='ajolista_'+crypto.randomUUID();
+ const body=new Blob([`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${XLSX_MIME}\r\n\r\n`,new Uint8Array(bytes),`\r\n--${boundary}--`]);
+ return driveRequest('/upload/drive/v2/files?uploadType=multipart&supportsAllDrives=true',{method:'POST',headers:{'Content-Type':`multipart/related; boundary=${boundary}`},body},'luonti');
+}
 export async function createDriveWorkbook(folderId:string,filename:string,bytes:Uint8Array){
  // Persist a pre-generated ID so a lost response can be retried without another file.
  const key=`drive:new:${folderId}:${filename}`;
- let id=await getStored<string>(key);
- if(!id){const response=await driveRequest('/drive/v3/files/generateIds?count=1&space=drive&type=files',{},'luonti');id=((await response.json()) as {ids:string[]}).ids[0];await putStored(key,id);}
+ let id=(await getStored<string>(key))||'';
+ if(!id){
+  // Esigeneroitu tunnus ei ole käytössä kaikissa Drive-ympäristöissä (esim. jotkin
+  // työtilat hylkäävät generateIds-pyynnön). Silloin jatketaan tavallisella lisäyksellä.
+  try{id=await preGeneratedId();await putStored(key,id);}catch{id='';}
+ }
  // Drive has no atomic "create only if filename absent". Recheck before creating;
  // duplicate names are detected after creation and never silently consolidated.
  if(await findDriveWorkbook(folderId,filename))throw new DriveConflict();
- const boundary='ajolista_'+crypto.randomUUID();
- const metadata={id,title:filename,mimeType:XLSX_MIME,parents:[{id:folderId}]};
- const body=new Blob([`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${XLSX_MIME}\r\n\r\n`,new Uint8Array(bytes),`\r\n--${boundary}--`]);
+ const alreadyThere=async()=>{if(await findDriveWorkbook(folderId,filename))throw new DriveConflict();};
  let response:Response;
- try{response=await driveRequest('/upload/drive/v2/files?uploadType=multipart&supportsAllDrives=true',{method:'POST',headers:{'Content-Type':`multipart/related; boundary=${boundary}`},body},'luonti');}
- catch(error){if(await findDriveWorkbook(folderId,filename))throw new DriveConflict();throw error;}
+ try{response=await insertDriveWorkbook(folderId,filename,bytes,id);}
+ catch(first){
+  await alreadyThere();
+  if(!id)throw first;
+  // Epäonnistunut luonti ei jätä tiedostoa taakseen, joten ilman tunnusta uudelleen
+  // yrittäminen on turvallista eikä tuplaa tiedostoja.
+  await deleteStored(key).catch(()=>{});
+  try{response=await insertDriveWorkbook(folderId,filename,bytes,'');}
+  catch(second){await alreadyThere();throw second;}
+ }
  return await response.json() as DriveFile;
 }

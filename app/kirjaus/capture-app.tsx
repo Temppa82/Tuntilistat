@@ -40,7 +40,7 @@ import {validDate} from '@/lib/capture';
 import {dayKey,sameDayValues,hasDayValues} from '@/lib/day-drafts';
 import {snapshot,noteStep,sameSnapshot,undoStep,type DraftSnapshot,type HistoryEntry} from '@/lib/draft-history';
 import {discardSavedDay} from '@/lib/remove-day';
- const APP_VERSION='2.13.9';
+ const APP_VERSION='2.13.10';
 
 
 export default function CaptureApp(){
